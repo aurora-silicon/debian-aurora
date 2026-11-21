@@ -1,0 +1,24 @@
+Source: speakerguardd
+Section: sound
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), cargo:native, rustc:native, libstd-rust-dev, ca-certificates
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/speakerguardd
+Rules-Requires-Root: no
+
+Package: speakerguardd
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Feed-forward speaker protection for the MacBook Neo (J700)
+ speakerguardd 0.1 protects the speakers of Apple Silicon Macs whose
+ amplifiers have no voltage and current sense, the MacBook Neo (J700), with a
+ thermal model driven by the audio it is fed. Until the daemon holds the
+ sound card's volume lock, the kernel keeps the speakers at their safe level.
+ .
+ udev starts it for the J700 speaker card; on the J700 speakersafetyd does not
+ start. Where speakerguardd v2 is installed, its gate decides at every boot
+ whether this daemon or v2 holds the speakers.
+ .
+ speakerguardd 0.1 is deprecated and will be removed; aurora-speaker-upgrade
+ moves a Mac to speakerguardd v2.

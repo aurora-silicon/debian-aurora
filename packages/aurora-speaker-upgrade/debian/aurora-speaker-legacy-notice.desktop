@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Aurora speaker protection notice
+Comment=Says once that the legacy speaker protection is deprecated
+Exec=/usr/libexec/aurora-speaker-upgrade/legacy-notice --desktop
+NoDisplay=true
+X-GNOME-Autostart-Delay=10
+X-KDE-autostart-phase=2

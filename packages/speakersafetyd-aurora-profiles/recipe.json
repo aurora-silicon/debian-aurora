@@ -1,0 +1,8 @@
+{
+  "source": "speakersafetyd-aurora-profiles",
+  "version": "1.2",
+  "kind": "native",
+  "changes": "speakersafetyd models for the J616 (MacBook Pro 16-inch M4 Pro/Max) and the J575c (Mac Studio M4 Max), the udev rule that starts speakersafetyd for the J616, and a drop-in that keeps a restart within the same boot warm (the same files as alarm-aurora's speakersafetyd-aurora-profiles 1-2).\nThe legacy speaker protection (speakersafetyd, speakerguardd 0.1) is deprecated and will be removed; speakerguardd v2 is opt in through aurora-speaker-upgrade, and the description says so.",
+  "alarm": ["speakersafetyd-aurora-profiles"],
+  "notes": "The model values are speakersafetyd's own j316.conf and j575.conf (identical in 2.0.1 and Debian's 3.0.0) with each machine's sense layout. j575c.conf needs Aurora's speakersafetyd, which tries the machine's own configuration before its family's."
+}

@@ -1,0 +1,4 @@
+j616.conf usr/share/speakersafetyd/apple/
+j575c.conf usr/share/speakersafetyd/apple/
+96-speakersafetyd-aurora.rules usr/lib/udev/rules.d/
+50-aurora-warm-restart.conf usr/lib/systemd/system/speakersafetyd.service.d/

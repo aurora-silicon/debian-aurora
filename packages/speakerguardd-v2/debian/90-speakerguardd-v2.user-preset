@@ -1,0 +1,2 @@
+enable speakerguardd-v2-graph.service
+enable speakerguardd-v2-session.service

@@ -1,0 +1,54 @@
+#!/usr/bin/make -f
+# The build mirrors alarm-aurora's speakerguardd recipe: the pinned source
+# built with cargo --locked and Debian's Rust toolchain.
+include /usr/share/dpkg/architecture.mk
+include /usr/share/rustc/architecture.mk
+
+COMMIT := $(shell sed -n 's/^commit=//p' debian/aurora-pin)
+JOBS := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+export CARGO_HOME := $(CURDIR)/debian/.cargo
+export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER := $(DEB_HOST_GNU_TYPE)-gcc
+CARGO_FLAGS := --locked --target $(DEB_HOST_RUST_TYPE) -j$(or $(JOBS),1)
+PKG := debian/speakerguardd
+UNIT := $(PKG)/usr/lib/systemd/system/speakerguardd.service
+EXEC := ExecStart=/usr/bin/speakerguardd -c /usr/share/speakerguardd
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	# The binary names its source in -V and the journal.
+	SPEAKERGUARDD_COMMIT=$(shell echo $(COMMIT) | cut -c1-12) cargo build --release $(CARGO_FLAGS)
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+ifeq ($(DEB_BUILD_ARCH),$(DEB_HOST_ARCH))
+	cargo test $(CARGO_FLAGS)
+endif
+endif
+
+override_dh_auto_install:
+	install -Dm755 target/$(DEB_HOST_RUST_TYPE)/release/speakerguardd $(PKG)/usr/bin/speakerguardd
+	install -d $(PKG)/usr/share/speakerguardd
+	cp -a conf/. $(PKG)/usr/share/speakerguardd/
+	install -Dm644 95-speakerguardd.rules $(PKG)/usr/lib/udev/rules.d/95-speakerguardd.rules
+	# The unit keeps its own start limit; only the J700 model is named.
+	test "$$(grep -c '^ExecStart=' speakerguardd.service)" = 1
+	sed 's@^$(EXEC) --wait-for-card 30$$@$(EXEC) -C AppleJ700 --wait-for-card 30@' speakerguardd.service > debian/speakerguardd.service
+	grep -qx '$(EXEC) -C AppleJ700 --wait-for-card 30' debian/speakerguardd.service
+	install -Dm644 debian/speakerguardd.service $(UNIT)
+	# speakersafetyd stands down on the J700, which has no speaker sense.
+	install -Dm755 debian/use-feedback-guard $(PKG)/usr/libexec/speakerguardd/use-feedback-guard
+	install -Dm644 debian/50-j700-guard.conf $(PKG)/usr/lib/systemd/system/speakersafetyd.service.d/50-j700-guard.conf
+
+# udev starts the unit for the J700 speaker card; it is not enabled. A running
+# daemon is restarted on upgrade: until it renews the volume lock the kernel
+# keeps the speakers at their safe level.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable speakerguardd.service
+
+override_dh_clean:
+	dh_clean debian/speakerguardd.service
+	rm -rf debian/.cargo target

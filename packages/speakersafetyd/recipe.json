@@ -1,0 +1,10 @@
+{
+  "source": "rust-speakersafetyd",
+  "version": "3.0.0-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "rust-speakersafetyd", "version": "3.0.0-1"},
+  "cross": false,
+  "changes": "Skip a sense period read after a startup probe already closed the speakers instead of panicking (Aurora's 0002, rebased on 3.0.0).\nTry the machine's own configuration (apple/j575c.conf) before its family's (apple/j575.conf) (Aurora's 0003, rebased on 3.0.0).",
+  "alarm": ["speakersafetyd"],
+  "notes": "speakersafetyd 3.0.0 is 2.0.1 with Aurora's 0001 (the j504 speaker names) merged, a relicence to GPL-2.0-only and timestamps in its log; the model, the configuration format and every shipped model value are unchanged, so this build runs the same daemon as alarm-aurora's 2.0.1-1.2. Debian's librust-*-dev build dependencies do not resolve for a cross build (librust-configparser-dev:arm64 needs librust-async-std-1+default-dev:arm64, which has no installable candidate), so it is built emulated."
+}

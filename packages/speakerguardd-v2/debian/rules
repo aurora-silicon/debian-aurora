@@ -1,0 +1,92 @@
+#!/usr/bin/make -f
+# The build mirrors alarm-aurora's speakerguardd-v2 recipe: the shipped crates
+# of the pinned source built with cargo --locked and Debian's Rust toolchain,
+# and the upstream units renamed beside speakerguardd 0.1 (debian/units.py).
+include /usr/share/dpkg/architecture.mk
+include /usr/share/rustc/architecture.mk
+
+JOBS := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+export CARGO_HOME := $(CURDIR)/debian/.cargo
+export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER := $(DEB_HOST_GNU_TYPE)-gcc
+# The crates this package ships; the rig and benchmark crates stay out.
+CARGO_FLAGS := --locked --release --target $(DEB_HOST_RUST_TYPE) -j$(or $(JOBS),1) \
+	-p sgv2-core -p sgv2-lv2 -p sgv2-supervisor -p aurora-speaker-tuning
+OUT := target/$(DEB_HOST_RUST_TYPE)/release
+LX := /usr/libexec/speakerguardd-v2
+PKG := debian/speakerguardd-v2
+UNITS := debian/units
+LV2 := $(PKG)/usr/lib/lv2/sgv2.lv2
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	python3 debian/units.py $(LX) $(UNITS)
+
+override_dh_auto_build:
+	cargo build $(CARGO_FLAGS)
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+ifeq ($(DEB_BUILD_ARCH),$(DEB_HOST_ARCH))
+	cargo test $(CARGO_FLAGS)
+endif
+	python3 -I packaging/session/test_provision.py
+	python3 -I packaging/session/test_wiring.py
+	python3 -I packaging/session/test_verify.py
+endif
+
+override_dh_auto_install:
+	# The units this package enables, recorded as presets too, so a full
+	# preset run keeps them (aurora-boot ends the presets with disable *).
+	install -Dm644 debian/90-speakerguardd-v2.preset $(PKG)/usr/lib/systemd/system-preset/90-speakerguardd-v2.preset
+	install -Dm644 debian/90-speakerguardd-v2.user-preset $(PKG)/usr/lib/systemd/user-preset/90-speakerguardd-v2.preset
+	install -Dm755 $(OUT)/speakerguardd $(PKG)$(LX)/speakerguardd
+	install -Dm755 $(OUT)/aurora-speaker-tuning $(PKG)/usr/bin/aurora-speaker-tuning
+	install -d $(LV2)
+	install -m644 crates/sgv2-lv2/lv2/sgv2.lv2/*.ttl $(LV2)/
+	install -m755 $(OUT)/libsgv2_lv2.so $(LV2)/libsgv2_lv2.so
+	# Every plugin the bundle names must be the library installed beside it.
+	! grep -ho 'lv2:binary <[^>]*>' $(LV2)/*.ttl | grep -v '<libsgv2_lv2.so>'
+	for f in speakerguardd-provision speakerguardd-gate speakerguardd-selfcheck speakerguardd-session; do \
+	  install -Dm755 packaging/session/$$f $(PKG)$(LX)/$$f || exit 1; \
+	done
+	install -m644 packaging/session/wiring.py packaging/session/gen.py $(PKG)$(LX)/
+	# The fleet gate's data and the macOS parity attestation 'speakerguardd-selfcheck
+	# verify' reads, unchanged from upstream. Every per-board value is derived
+	# from the Mac's device tree and tuning at run time (wiring.py).
+	install -Dm644 -t $(PKG)/usr/share/speakerguardd/ packaging/session/gate.json packaging/session/parity.json
+	# The per-machine graphs, as reference data: provisioning generates the
+	# machine's own from the self-check's record.
+	install -Dm644 -t $(PKG)/usr/share/speakerguardd/pipewire/ packaging/pipewire/sgv2-*.conf
+	install -Dm644 -t $(PKG)/usr/share/speakerguardd/wireplumber/ packaging/wireplumber/60-sgv2-*.conf
+	for u in speakerguardd-v2.service speakerguardd-v2-provision.service speakerguardd-v2-selfcheck.service \
+	         speakerguardd-v2-switchtest.service speakerguardd-v2-seat.service speakerguardd-v2-seat.path \
+	         speakerguardd-v2-sleep.service; do \
+	  install -Dm644 $(UNITS)/$$u $(PKG)/usr/lib/systemd/system/$$u || exit 1; \
+	done
+	for u in speakerguardd-v2-session.service speakerguardd-v2-graph.service; do \
+	  install -Dm644 $(UNITS)/$$u $(PKG)/usr/lib/systemd/user/$$u || exit 1; \
+	done
+	# The older daemons start only where v2 does not run and the kernel has no
+	# v2 interface: exactly one stack holds the speakers on each boot.
+	for u in speakersafetyd speakerguardd; do \
+	  install -Dm644 $(UNITS)/legacy-gate.conf $(PKG)/usr/lib/systemd/system/$$u.service.d/60-speakerguardd-v2-gate.conf || exit 1; \
+	done
+
+# Enabled as alarm-aurora's package enables them; the gate in every unit
+# decides whether anything runs. Provisioning, the self-check and the switch
+# test are pulled in by the supervisor's Requires=. No unit is started or
+# restarted by the maintainer scripts: a change takes effect at the next boot.
+override_dh_installsystemd:
+	dh_installsystemd --no-start speakerguardd-v2.service speakerguardd-v2-seat.path speakerguardd-v2-sleep.service
+	dh_installsystemd --no-enable --no-start speakerguardd-v2-provision.service speakerguardd-v2-selfcheck.service \
+	  speakerguardd-v2-switchtest.service speakerguardd-v2-seat.service
+
+# The seat user's graph links and the session helper, for every user.
+override_dh_installsystemduser:
+	dh_installsystemduser speakerguardd-v2-graph.service speakerguardd-v2-session.service
+
+override_dh_clean:
+	dh_clean
+	rm -rf debian/.cargo $(UNITS) target

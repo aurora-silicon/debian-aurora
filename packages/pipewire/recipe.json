@@ -1,0 +1,9 @@
+{
+  "source": "pipewire",
+  "version": "1.6.9-2+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "pipewire", "version": "1.6.9-2"},
+  "changes": "module-raop: match an RTSP reply without CSeq, say why a receiver dropped a session, default the latency to whole packets, reload a sink that unloaded itself, give up on a session that never reaches RECORD.\nfilter-graph: follow plugin latency after activation; keep the software volume at unity on every volume or mute update when the graph carries the volume.\nalsa: back off a refused snd_pcm_start and rate-limit its log; a start on a suspended PCM is expected; put the ELD product name on HDMI/DP nodes; prepare a stream again after its start failed.\nlibspa-0.2-modules provides pipewire-speaker-graph (= 2), the level speakerguardd-v2 requires.",
+  "alarm": ["pipewire"],
+  "notes": "Aurora's patches 1000-1010 (alarm-aurora and fedora-aurora, written against 1.6.11) apply to Debian's 1.6.9 unchanged, without offset or fuzz; between 1.6.9 and 1.6.11 the files they touch differ only in one cast in alsa-pcm.c. The virtual package stands in for alarm-aurora's pipewire-audio Provides, on the binary package that carries the patched ALSA and filter-graph SPA plugins."
+}

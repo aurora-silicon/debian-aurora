@@ -1,0 +1,5 @@
+# speakerguardd v2 holds the speakers wherever its gate admits this Mac;
+# every unit checks that gate itself.
+enable speakerguardd-v2.service
+enable speakerguardd-v2-seat.path
+enable speakerguardd-v2-sleep.service

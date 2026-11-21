@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: alsa-ucm-conf-asahi
+Source: https://github.com/aurora-silicon/alsa-ucm-conf-asahi
+
+Files: *
+Copyright: The Asahi Linux contributors and Aurora Silicon
+License: BSD-3-Clause
+ See LICENSE.asahi in the source.

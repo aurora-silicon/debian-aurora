@@ -1,0 +1,21 @@
+Source: alsa-ucm-conf-aurora
+Section: sound
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/alsa-ucm-conf-asahi
+Rules-Requires-Root: no
+
+Package: alsa-ucm-conf-aurora
+Architecture: all
+Multi-Arch: foreign
+Depends: alsa-ucm-conf, ${misc:Depends}
+Provides: alsa-ucm-conf-asahi (= ${binary:Version})
+Conflicts: alsa-ucm-conf-asahi
+Replaces: alsa-ucm-conf-asahi
+Description: ALSA UCM profiles for Apple Silicon Macs (Aurora)
+ Aurora Silicon's ALSA Use Case Manager profiles for the built-in audio of
+ Apple Silicon Macs, including the MacBook Neo (J700). They replace Debian's
+ alsa-ucm-conf-asahi. Speaker output additionally requires Aurora's speaker
+ protection, which the aurora-audio package provides.

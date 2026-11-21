@@ -1,0 +1,9 @@
+{
+  "source": "lsp-plugins",
+  "version": "1.2.37-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "lsp-plugins", "version": "1.2.37-1"},
+  "changes": "loud_comp: report the latency of the FFT size in use and size the dry delay line for the largest FFT (the same patch as alarm-aurora's lsp-plugins-lv2 and fedora-aurora's lsp-plugins).",
+  "alarm": ["lsp-plugins-lv2"],
+  "notes": "alarm-aurora's check() also runs lsp-latency-check, an LV2 host that compares each latency port the speaker graphs use with an impulse's delay. It is not ported: it needs the target architecture to run, so a cross build could not run it."
+}

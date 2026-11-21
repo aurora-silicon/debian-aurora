@@ -1,0 +1,12 @@
+--- a/debian/control
++++ b/debian/control
+@@ -174,6 +174,9 @@
+ Multi-Arch: same
+ Depends: ${misc:Depends},
+          ${shlibs:Depends}
++# The SPA fixes speakerguardd-v2's speaker graph runs on (Aurora patches),
++# as a level stock PipeWire never provides: 1 = 1006, 2 = 1007, 1008, 1010.
++Provides: pipewire-speaker-graph (= 2)
+ Breaks: pipewire (<< 0.3.5)
+ Replaces: pipewire (<< 0.3.5)
+ Description: libraries for the PipeWire multimedia server Simple Plugin API - modules

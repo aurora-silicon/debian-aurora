@@ -1,0 +1,8 @@
+{
+  "source": "alsa-utils",
+  "version": "1.2.16-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "alsa-utils", "version": "1.2.16-1"},
+  "changes": "alsactl: leave a control that another process has locked to its owner instead of failing to restore it (the speaker protection daemons lock the speaker amplifier controls; the same patch as alarm-aurora's alsa-utils-aurora).",
+  "alarm": ["alsa-utils-aurora"]
+}

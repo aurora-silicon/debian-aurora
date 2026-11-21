@@ -1,0 +1,8 @@
+{
+  "source": "alsa-ucm-conf-aurora",
+  "version": "10.aurora2-1",
+  "kind": "upstream",
+  "upstream": {"pin": "alsa-ucm-conf-aurora"},
+  "changes": "Aurora's Apple Silicon ALSA UCM profiles, including the MacBook Neo (J700); replaces Debian's alsa-ucm-conf-asahi.",
+  "alarm": ["alsa-ucm-conf-aurora"]
+}

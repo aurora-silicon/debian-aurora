@@ -1,0 +1,28 @@
+aurora-speaker-upgrade on Aurora Debian
+=======================================
+
+speakerguardd v2 is opt in. A fresh install keeps the legacy speaker
+protection on the Macs it supports: speakersafetyd (with
+speakersafetyd-aurora-profiles) and, on the MacBook Neo (J700), speakerguardd
+0.1. The kernel holds every other Mac's speakers at their safe level.
+
+The legacy protection is deprecated and will be removed. Please help bring up
+speakerguardd v2 on your Mac:
+
+  sudo aurora-speaker-upgrade --check   # dry run: collect, compile, self-check
+  sudo aurora-speaker-upgrade           # switch, only if the self-check passes
+  sudo aurora-speaker-upgrade status
+  sudo aurora-speaker-upgrade --revert  # back to the legacy protection
+  aurora-speaker-upgrade guide          # when Linux cannot read the tuning
+
+and report the result at https://github.com/aurora-silicon/speakerguardd/issues.
+
+aurora-speaker-upgrade.service is installed disabled. Enabling it
+(systemctl enable aurora-speaker-upgrade.service) makes every boot try the
+switch, as alarm-aurora and fedora-aurora do; a refusal is recorded and not
+retried until the kernel, speakerguardd v2 or the tool changes.
+
+While a legacy daemon holds the speakers, a notice says so at console and SSH
+logins (/etc/update-motd.d/60-aurora-speaker-protection) and once per user in
+the desktop (/etc/xdg/autostart/aurora-speaker-legacy-notice.desktop). Remove
+either file to silence it.

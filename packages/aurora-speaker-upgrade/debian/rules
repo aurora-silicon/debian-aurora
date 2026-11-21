@@ -1,0 +1,27 @@
+#!/usr/bin/make -f
+PKG := debian/aurora-speaker-upgrade
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	python3 -I -m unittest discover -s packaging/upgrade/tests
+endif
+
+override_dh_auto_install:
+	$(MAKE) -C packaging/upgrade install DESTDIR=$(CURDIR)/$(PKG) PREFIX=/usr UNITDIR=/usr/lib/systemd/system
+	# speakerguardd-v2 installs its helpers in the directory the tool tries first.
+	grep -q '^LIBEXEC = ("/usr/libexec/speakerguardd-v2",' $(PKG)/usr/lib/aurora-speaker-upgrade/aurora_speaker_upgrade/upgrade.py
+	# The deprecation notice for the legacy speaker protection.
+	install -Dm755 debian/legacy-notice $(PKG)/usr/libexec/aurora-speaker-upgrade/legacy-notice
+	install -Dm755 debian/60-aurora-speaker-protection $(PKG)/etc/update-motd.d/60-aurora-speaker-protection
+	install -Dm644 debian/aurora-speaker-legacy-notice.desktop $(PKG)/etc/xdg/autostart/aurora-speaker-legacy-notice.desktop
+
+# speakerguardd v2 is opt in on Aurora Debian (alarm-aurora's preset enables the
+# unit): installed disabled and never started from the maintainer scripts. The
+# user runs aurora-speaker-upgrade, or enables the unit (README.Debian).
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start aurora-speaker-upgrade.service

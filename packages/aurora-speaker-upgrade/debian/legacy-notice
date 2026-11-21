@@ -1,0 +1,31 @@
+#!/bin/sh
+# Tells the user that the deprecated legacy speaker protection (speakersafetyd,
+# speakerguardd 0.1) holds this Mac's speakers, and how to move to speakerguardd
+# v2. Silent when neither legacy daemon runs. Without an argument it prints the
+# notice (the login message); with --desktop it shows it once per user as a
+# desktop notification.
+systemctl is-active --quiet speakersafetyd.service speakerguardd.service || exit 0
+
+summary="Legacy speaker protection is deprecated"
+case "$1" in
+--desktop)
+	state=${XDG_STATE_HOME:-$HOME/.local/state}/aurora-speaker-upgrade
+	[ -e "$state/legacy-notice-1" ] && exit 0
+	body="This Mac's speakers are protected by speakersafetyd or speakerguardd 0.1, which will be removed. Please help bring up speakerguardd v2: run 'sudo aurora-speaker-upgrade --check' in a terminal (a dry run), then 'sudo aurora-speaker-upgrade', and report the result at https://github.com/aurora-silicon/speakerguardd/issues."
+	busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+		org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+		"Aurora" 0 audio-speakers "$summary" "$body" 0 0 0 >/dev/null || exit 0
+	mkdir -p "$state" && : >"$state/legacy-notice-1"
+	;;
+*)
+	cat <<EOF
+
+$summary: this Mac's speakers are protected by
+speakersafetyd or speakerguardd 0.1, which will be removed. Please help bring
+up speakerguardd v2 on this Mac:
+  sudo aurora-speaker-upgrade --check   # dry run, changes nothing
+  sudo aurora-speaker-upgrade           # switch (--revert goes back)
+and report the result at https://github.com/aurora-silicon/speakerguardd/issues.
+EOF
+	;;
+esac

@@ -1,0 +1,24 @@
+Source: speakerguardd-v2
+Section: sound
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), cargo:native, rustc:native, libstd-rust-dev, python3:native, ca-certificates
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/speakerguardd
+Rules-Requires-Root: no
+
+Package: speakerguardd-v2
+Architecture: arm64
+Depends: python3, alsa-utils, pipewire, pipewire-speaker-graph (>= 2), systemd, aurora-audio (>= 4.1.aurora2-1),
+ ${shlibs:Depends}, ${misc:Depends}
+Description: In-graph speaker protection for Apple Silicon Macs (speakerguardd 1.0)
+ speakerguardd 1.0 protects the speakers the way macOS does: the protection
+ unit runs inside the PipeWire speaker graph as an LV2 plugin, with the
+ amplifiers' voltage and current sense as its second input where the Mac has
+ it, driven by that Mac's own tuning bundle.
+ .
+ It installs beside speakersafetyd and speakerguardd 0.1. Installing it changes
+ nothing by itself: at every boot the fleet gate starts exactly one stack, and
+ v2 only on a Mac that aurora-speaker-upgrade has switched and whose own tuning
+ passed the self-check. Any failure fails closed: the supervisor does not
+ start and the kernel keeps the speakers at their safe level.

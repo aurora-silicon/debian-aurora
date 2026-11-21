@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+SHARE := debian/aurora-audio/usr/share
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	dh_auto_install -- PREFIX=/usr
+	# MCA speaker PCMs and the J616's wake on period interrupts: a clock slew
+	# no longer re-prepares the speaker sink.
+	install -Dm644 debian/99-aurora-speaker-irq.conf $(SHARE)/wireplumber/wireplumber.conf.d/99-aurora-speaker-irq.conf
+	# The legacy speaker graphs are installed and named by the WirePlumber rules.
+	for board in j316 j413 j616 j700; do \
+	  test -s $(SHARE)/asahi-audio/$$board/graph.json || exit 1; \
+	  grep -q /usr/share/asahi-audio/$$board/graph.json $(SHARE)/wireplumber/wireplumber.conf.d/99-asahi.conf || exit 1; \
+	done
+	test -s $(SHARE)/asahi-audio/j700/48.wav

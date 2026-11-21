@@ -1,0 +1,11 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: speakersafetyd-aurora-profiles
+Source: https://github.com/aurora-silicon/alarm-aurora
+
+Files: *
+Copyright: The Asahi Linux Contributors, Aurora Silicon
+License: GPL-2.0-only
+ The profiles are derived from speakersafetyd's configuration files.
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 2 can be found in /usr/share/common-licenses/GPL-2.

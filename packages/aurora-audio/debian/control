@@ -1,0 +1,28 @@
+Source: aurora-audio
+Section: sound
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/asahi-audio
+Rules-Requires-Root: no
+
+Package: aurora-audio
+Architecture: all
+Multi-Arch: foreign
+Depends: alsa-ucm-conf-aurora, pipewire-audio, wireplumber (>= 0.5.16), bankstown-lv2, triforce-lv2, lsp-plugins-lv2,
+ speakersafetyd, speakerguardd, alsa-utils (>= 1.2.16-1+aurora1), speakerguardd-v2 (>= 1.0.0~alpha.2-1),
+ aurora-speaker-upgrade (>= 0.1-1), ${misc:Depends}
+Provides: asahi-audio (= ${binary:Version})
+Conflicts: asahi-audio
+Replaces: asahi-audio
+Description: PipeWire DSP profiles for Apple Silicon Macs (Aurora)
+ Aurora Silicon's PipeWire and WirePlumber DSP profiles for the speakers and
+ microphones of Apple Silicon Macs, including the MacBook Neo (J700). They
+ replace Debian's asahi-audio.
+ .
+ The package pulls in the speaker protection: speakersafetyd and speakerguardd
+ 0.1 keep the speakers of the Macs they support. They are deprecated;
+ speakerguardd v2 is opt in, and aurora-speaker-upgrade moves a Mac whose own
+ tuning passes the silent self-check to it. Without a running protection
+ daemon the kernel keeps the speakers at their safe level.

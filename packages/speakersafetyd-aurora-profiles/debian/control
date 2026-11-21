@@ -1,0 +1,26 @@
+Source: speakersafetyd-aurora-profiles
+Section: sound
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/alarm-aurora
+Rules-Requires-Root: no
+
+Package: speakersafetyd-aurora-profiles
+Architecture: all
+Multi-Arch: foreign
+Depends: speakersafetyd (>= 3.0.0-1+aurora1), ${misc:Depends}
+Description: speakersafetyd profiles for Aurora-supported Macs
+ speakersafetyd models for Macs that speakersafetyd does not list itself: the
+ MacBook Pro 16-inch M4 Pro/Max (J616) and the Mac Studio M4 Max (J575c). Each
+ uses speakersafetyd's own model values for its speakers with the machine's
+ voltage and current sense layout.
+ .
+ A restart of speakersafetyd within the same boot starts from the worst-case
+ speaker temperature. Without a running daemon the kernel keeps the speaker
+ volumes locked.
+ .
+ This legacy protection is deprecated and will be removed:
+ aurora-speaker-upgrade moves a Mac to speakerguardd v2, which takes its
+ values from the Mac itself.

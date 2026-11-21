@@ -1,0 +1,10 @@
+{
+  "source": "speakerguardd",
+  "version": "0.1.12-1",
+  "kind": "upstream",
+  "upstream": {"pin": "speakerguardd"},
+  "network": true,
+  "changes": "Aurora's feed-forward speaker protection (speakerguardd 0.1) for the MacBook Neo (J700), built as alarm-aurora builds it: the unit names only the J700 model, and speakersafetyd stands down on the J700.\nThe legacy speaker protection (speakersafetyd, speakerguardd 0.1) is deprecated and will be removed; speakerguardd v2 is opt in through aurora-speaker-upgrade, and the description says so.",
+  "alarm": ["speakerguardd"],
+  "notes": "The build fetches the crates Cargo.lock pins from crates.io (cargo --locked), as alarm-aurora's build does, and uses Debian's Rust toolchain."
+}

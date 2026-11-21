@@ -1,0 +1,10 @@
+{
+  "source": "speakerguardd-v2",
+  "version": "1.0.0~alpha.2-1",
+  "kind": "upstream",
+  "upstream": {"pin": "speakerguardd-v2"},
+  "network": true,
+  "changes": "speakerguardd 1.0 (the v2 branch), Aurora's in-graph speaker protection, installed beside speakersafetyd and speakerguardd 0.1 as alarm-aurora installs it: the shipped crates (supervisor, LV2 protection unit, tuning reader), provisioning, the silent self-check and the fleet gate, with the upstream units renamed speakerguardd-v2 and gate drop-ins on the older daemons.",
+  "alarm": ["speakerguardd-v2"],
+  "notes": "The build fetches the crates Cargo.lock pins from crates.io (cargo --locked), as alarm-aurora's build does, and uses Debian's Rust toolchain. The programs go to /usr/libexec/speakerguardd-v2 (upstream's and fedora-aurora's directory, which aurora-speaker-upgrade looks in first) instead of alarm-aurora's /usr/lib/speakerguardd-v2."
+}
