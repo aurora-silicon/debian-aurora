@@ -1,0 +1,414 @@
+From: Aurora Silicon <noreply@aurorasilicon.org>
+Subject: Add the checks alarm-aurora runs on the Aurora patches
+
+The account gate (0001) compiled against a fake passwd lookup, and the
+opt-in polkit password switch (0005) against a mock fprintd on a private
+bus. Unchanged from alarm-aurora packages/fprintd-aurora.
+---
+diff -Nru a/tests/aurora/mock-fprintd.py b/tests/aurora/mock-fprintd.py
+--- a/tests/aurora/mock-fprintd.py	1970-01-01 01:00:00.000000000 +0100
++++ b/tests/aurora/mock-fprintd.py	2026-11-21 09:39:28.520709946 +0100
+@@ -0,0 +1,57 @@
++import sys
++import dbus
++import dbus.service
++from dbus.mainloop.glib import DBusGMainLoop
++from gi.repository import GLib
++
++DBusGMainLoop(set_as_default=True)
++bus = dbus.bus.BusConnection(sys.argv[1])
++name = dbus.service.BusName("net.reactivated.Fprint", bus)
++manager = "net.reactivated.Fprint.Manager"
++device = "net.reactivated.Fprint.Device"
++device_path = "/net/reactivated/Fprint/Device/0"
++
++class Manager(dbus.service.Object):
++    @dbus.service.method(manager, out_signature="ao")
++    def GetDevices(self):
++        return [device_path]
++
++class Device(dbus.service.Object):
++    @dbus.service.method("org.freedesktop.DBus.Properties", in_signature="ss", out_signature="v")
++    def Get(self, interface, prop):
++        return dbus.String("press")
++
++    @dbus.service.method(device, in_signature="s", out_signature="as")
++    def ListEnrolledFingers(self, user):
++        return ["left-index-finger"]
++
++    @dbus.service.method(device, in_signature="s")
++    def Claim(self, user):
++        pass
++
++    @dbus.service.method(device)
++    def Release(self):
++        pass
++
++    @dbus.service.method(device)
++    def VerifyStop(self):
++        with open(sys.argv[3], "a") as log:
++            log.write("stop\n")
++
++    @dbus.service.method(device, in_signature="s")
++    def VerifyStart(self, finger):
++        if sys.argv[2] == "match":
++            GLib.timeout_add(200, self.match)
++
++    @dbus.service.signal(device, signature="sb")
++    def VerifyStatus(self, result, done):
++        pass
++
++    def match(self):
++        self.VerifyStatus("verify-match", True)
++        return False
++
++manager_obj = Manager(name, "/net/reactivated/Fprint/Manager")
++device_obj = Device(name, device_path)
++print("ready", flush=True)
++GLib.MainLoop().run()
+diff -Nru a/tests/aurora/pam-test.c b/tests/aurora/pam-test.c
+--- a/tests/aurora/pam-test.c	1970-01-01 01:00:00.000000000 +0100
++++ b/tests/aurora/pam-test.c	2026-11-21 09:39:28.520696371 +0100
+@@ -0,0 +1,53 @@
++#define _GNU_SOURCE
++#include <security/pam_appl.h>
++#include <security/pam_ext.h>
++#include <security/pam_modules.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#ifdef MOCK_PASSWORD
++int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **argv)
++{
++    char *value = NULL;
++    int status = pam_prompt(pamh, PAM_PROMPT_ECHO_OFF, &value, "Password:");
++    int ok = status == PAM_SUCCESS && value && strcmp(value, "test-only-password") == 0;
++    free(value);
++    return ok ? PAM_SUCCESS : PAM_AUTH_ERR;
++}
++#else
++static int converse(int count, const struct pam_message **messages,
++                    struct pam_response **out, void *data)
++{
++    struct pam_response *responses = calloc(count, sizeof(*responses));
++    if (!responses) return PAM_BUF_ERR;
++    for (int i = 0; i < count; i++) {
++        printf("%s\n", messages[i]->msg);
++        fflush(stdout);
++        if (messages[i]->msg_style == PAM_PROMPT_ECHO_OFF) {
++            char line[512];
++            if (!fgets(line, sizeof(line), stdin)) {
++                free(responses);
++                return PAM_CONV_ERR;
++            }
++            line[strcspn(line, "\n")] = 0;
++            responses[i].resp = strdup(line);
++        }
++    }
++    *out = responses;
++    return PAM_SUCCESS;
++}
++
++int main(int argc, char **argv)
++{
++    pam_handle_t *pamh = NULL;
++    const struct pam_conv conversation = { converse, NULL };
++    int status = pam_start_confdir("polkit-1", argc > 2 ? argv[2] : "test-user", &conversation, argv[1], &pamh);
++    if (status == PAM_SUCCESS) {
++        status = pam_authenticate(pamh, 0);
++        pam_end(pamh, status);
++    }
++    printf("RESULT %d\n", status);
++    return status;
++}
++#endif
+diff -Nru a/tests/aurora/test_account_gate.py b/tests/aurora/test_account_gate.py
+--- a/tests/aurora/test_account_gate.py	1970-01-01 01:00:00.000000000 +0100
++++ b/tests/aurora/test_account_gate.py	2026-11-21 09:39:28.520657518 +0100
+@@ -0,0 +1,71 @@
++# SPDX-License-Identifier: GPL-2.0-or-later
++"""Compile fprintd's actual Aurora account gate against a fake passwd lookup."""
++
++import re
++import subprocess
++import sys
++import tempfile
++from pathlib import Path
++
++
++def function(source, name):
++    match = re.search(r"^" + name + r" \(", source, re.M)
++    if match is None:
++        raise AssertionError(f"missing {name}")
++    opening = source.index("{", match.start())
++    depth, end = 1, opening + 1
++    while depth:
++        depth += (source[end] == "{") - (source[end] == "}")
++        end += 1
++    return "static gboolean\n" + source[match.start():end]
++
++
++HARNESS = r'''
++#include <assert.h>
++#include <pwd.h>
++#include <stdbool.h>
++#include <string.h>
++#include <sys/types.h>
++typedef int gboolean;
++
++static int fake_getpwnam_r(const char *name, struct passwd *entry,
++                           char *buffer, size_t length, struct passwd **found)
++{
++    (void)buffer; (void)length;
++    if (strcmp(name, "missing") == 0) { *found = NULL; return 0; }
++    if (strcmp(name, "lookup-error") == 0) { *found = NULL; return 5; }
++    entry->pw_name = strcmp(name, "mismatch") == 0 ? "other" : (char *)name;
++    entry->pw_uid = strcmp(name, "no-uid") == 0 ? (uid_t)-1 : (uid_t)1000;
++    *found = entry;
++    return 0;
++}
++#define getpwnam_r fake_getpwnam_r
++FUNCTION
++#undef getpwnam_r
++int main(void)
++{
++    assert(aurora_account_resolves("existing"));
++    assert(!aurora_account_resolves("missing"));
++    assert(!aurora_account_resolves("lookup-error"));
++    assert(!aurora_account_resolves("mismatch"));
++    assert(!aurora_account_resolves("no-uid"));
++    assert(!aurora_account_resolves(""));
++    assert(!aurora_account_resolves(NULL));
++    return 0;
++}
++'''
++
++
++def main():
++    source = Path(sys.argv[1]).read_text()
++    code = HARNESS.replace("FUNCTION", function(source, "aurora_account_resolves"))
++    with tempfile.TemporaryDirectory() as directory:
++        path = Path(directory)
++        (path / "test.c").write_text(code)
++        subprocess.run(["cc", "-std=c11", "-Wall", "-Werror", "test.c", "-o", "test"],
++                       cwd=path, check=True)
++        subprocess.run([str(path / "test")], check=True)
++
++
++if __name__ == "__main__":
++    main()
+diff -Nru a/tests/aurora/test_password_switch.py b/tests/aurora/test_password_switch.py
+--- a/tests/aurora/test_password_switch.py	1970-01-01 01:00:00.000000000 +0100
++++ b/tests/aurora/test_password_switch.py	2026-11-21 09:39:28.520678698 +0100
+@@ -0,0 +1,210 @@
++from contextlib import contextmanager
++from pathlib import Path
++import os
++import dbus
++import re
++import socket
++import subprocess
++import tempfile
++import time
++
++HERE = Path(__file__).resolve().parent
++OFFER = re.compile(rb"fprintd:password-switch:([0-9a-f]{32})\n")
++INTERFACE = "net.reactivated.Fprint.PasswordSwitch"
++PREFIX = "/net/reactivated/Fprint/PasswordSwitch/"
++AGENT_PREFIX = "net.reactivated.Fprint.PasswordSwitch.Agent.p"
++
++
++@contextmanager
++def reader(mode, *, announce=True):
++    global stop_log
++    temporary = tempfile.TemporaryDirectory()
++    stop_log = Path(temporary.name) / "verify-stop"
++    daemon = subprocess.Popen(
++        ["dbus-daemon", "--session", "--nofork", "--print-address=1"],
++        stdout=subprocess.PIPE, text=True,
++    )
++    address = daemon.stdout.readline().strip()
++    mock = subprocess.Popen(
++        ["/usr/bin/python3", str(HERE / "mock-fprintd.py"), address, mode, str(stop_log)],
++        stdout=subprocess.PIPE, text=True,
++    )
++    agent = None
++    try:
++        assert mock.stdout.readline().strip() == "ready"
++        if announce:
++            agent = dbus.bus.BusConnection(address)
++            assert agent.request_name(AGENT_PREFIX + str(os.getpid()), dbus.bus.NAME_FLAG_DO_NOT_QUEUE) == dbus.bus.REQUEST_NAME_REPLY_PRIMARY_OWNER
++        yield address
++    finally:
++        if agent is not None:
++            agent.close()
++        for process in (mock, daemon):
++            process.terminate()
++            process.wait(timeout=3)
++        temporary.cleanup()
++
++
++@contextmanager
++def authenticate(address, *, timeout=10, enabled=True):
++    with tempfile.TemporaryDirectory() as tmp:
++        args = "polkit-password-switch" if enabled else ""
++        (Path(tmp) / "polkit-1").write_text(
++            f"auth sufficient {HERE}/pam_fprintd-switch.so {args} timeout={timeout} max-tries=1\n"
++            f"auth required {HERE}/pam_mock_password.so\n"
++        )
++        peer, helper_socket = socket.socketpair()
++        with peer, helper_socket:
++            peer.settimeout(3)
++            env = {key: value for key, value in os.environ.items() if key != "DBUS_SYSTEM_BUS_ADDRESS"}
++            if address:
++                env["DBUS_SYSTEM_BUS_ADDRESS"] = address
++            user = "test-user" if address else os.environ["USER"]
++            helper = subprocess.Popen(
++                [str(HERE / "pam-test"), tmp, user],
++                stdin=helper_socket, stdout=helper_socket, env=env,
++            )
++            helper_socket.close()
++            try:
++                with peer.makefile("rb") as output:
++                    yield peer, output, helper
++            finally:
++                if helper.poll() is None:
++                    helper.terminate()
++                    helper.wait(timeout=3)
++
++
++def offer(output):
++    while line := output.readline():
++        if match := OFFER.fullmatch(line):
++            return match[1].decode()
++    raise AssertionError("No switch offer")
++
++
++def password_prompt(output, *, expect_offer=True):
++    while line := output.readline():
++        if not expect_offer:
++            assert not OFFER.fullmatch(line), line
++        if line == b"Password:\n":
++            return
++    raise AssertionError("No password prompt")
++
++
++def signal(address, token, *payload):
++    bus = dbus.bus.BusConnection(address) if address else dbus.SystemBus(private=True)
++    message = dbus.lowlevel.SignalMessage(PREFIX + token, INTERFACE, "UsePassword")
++    if payload:
++        message.append(payload[1], signature=payload[0])
++    bus.send_message(message)
++    bus.flush()
++    return bus
++
++
++@contextmanager
++def foreign_sender(address, token):
++    # Hold the sender's bus connection open until PAM resolves its PID and UID.
++    program = """
++import dbus, sys
++bus = dbus.bus.BusConnection(sys.argv[1]) if sys.argv[1] else dbus.SystemBus(private=True)
++message = dbus.lowlevel.SignalMessage(sys.argv[2], sys.argv[3], 'UsePassword')
++bus.send_message(message)
++bus.flush()
++print('sent', flush=True)
++sys.stdin.readline()
++"""
++    process = subprocess.Popen(
++        ["/usr/bin/python3", "-c", program, address or "", PREFIX + token, INTERFACE],
++        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
++    )
++    try:
++        assert process.stdout.readline().strip() == "sent"
++        assert process.poll() is None
++        yield
++    finally:
++        process.stdin.close()
++        process.wait(timeout=3)
++
++
++def assert_scan_continues(peer, reason):
++    peer.settimeout(0.2)
++    try:
++        pending = peer.recv(1, socket.MSG_PEEK)
++    except TimeoutError:
++        return
++    finally:
++        peer.settimeout(3)
++    raise AssertionError(f"{reason}: unexpected PAM response {pending!r}")
++
++
++def result(output, helper, code):
++    assert output.readline() == f"RESULT {code}\n".encode()
++    assert helper.wait(timeout=3) == code
++
++
++with reader("wait") as address:
++    with authenticate(address) as (peer, output, helper):
++        first = offer(output)
++        started = time.monotonic()
++        agent = signal(address, first)
++        password_prompt(output)
++        assert stop_log.read_text() == "stop\n", "switch must stop verification before password prompt"
++        assert time.monotonic() - started < 1
++        peer.sendall(b"wrong-password\n")
++        result(output, helper, 7)
++    with authenticate(address) as (peer, output, helper):
++        second = offer(output)
++        assert first != second
++        agent = signal(address, first)
++        malformed = signal(address, second, "s", "unexpected-payload")
++        assert_scan_continues(peer, "Stale or malformed signal")
++        with foreign_sender(address, second):
++            assert_scan_continues(peer, "Another process with the current token")
++        agent = signal(address, second)
++        password_prompt(output)
++        peer.sendall(b"test-only-password\n")
++        result(output, helper, 0)
++    with authenticate(address, timeout=1) as (peer, output, helper):
++        token = offer(output)
++        password_prompt(output)
++        agent = signal(address, token)
++        # The first password attempt still belongs to the user.
++        peer.sendall(b"test-only-password\n")
++        result(output, helper, 0)
++    with authenticate(address, timeout=1, enabled=False) as (peer, output, helper):
++        password_prompt(output, expect_offer=False)
++        peer.sendall(b"test-only-password\n")
++        result(output, helper, 0)
++
++# A stock agent must not see a token even when the PAM option is enabled.
++with reader("wait", announce=False) as address:
++    with authenticate(address, timeout=1) as (peer, output, helper):
++        password_prompt(output, expect_offer=False)
++        peer.sendall(b"test-only-password\n")
++        result(output, helper, 0)
++
++    # A different process cannot advertise support on behalf of the socket peer.
++    program = """
++import dbus, sys
++bus = dbus.bus.BusConnection(sys.argv[1])
++assert bus.request_name(sys.argv[2], dbus.bus.NAME_FLAG_DO_NOT_QUEUE) == dbus.bus.REQUEST_NAME_REPLY_PRIMARY_OWNER
++print('ready', flush=True)
++sys.stdin.readline()
++"""
++    imposter = subprocess.Popen(["/usr/bin/python3", "-c", program, address, AGENT_PREFIX + str(os.getpid())],
++                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
++    try:
++        assert imposter.stdout.readline().strip() == "ready"
++        with authenticate(address, timeout=1) as (peer, output, helper):
++            password_prompt(output, expect_offer=False)
++            peer.sendall(b"test-only-password\n")
++            result(output, helper, 0)
++    finally:
++        imposter.stdin.close()
++        imposter.wait(timeout=3)
++
++with reader("match") as address:
++    with authenticate(address) as (_, output, helper):
++        offer(output)
++        result(output, helper, 0)
++
++print("PASS: immediate switch, valid and invalid passwords, same-UID foreign sender, stale and malformed signals, late click, opt-out, stock agent, foreign advertiser, fingerprint match")

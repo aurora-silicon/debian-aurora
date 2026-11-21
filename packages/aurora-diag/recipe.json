@@ -1,0 +1,8 @@
+{
+  "source": "aurora-diag",
+  "version": "0.5.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-diag"},
+  "changes": "Aurora's bring-up diagnostics and regression checks for Apple silicon Macs (development only), as alarm-aurora packages them.",
+  "alarm": ["aurora-diag"]
+}

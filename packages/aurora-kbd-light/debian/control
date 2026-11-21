@@ -1,0 +1,17 @@
+Source: aurora-kbd-light
+Section: utils
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/kbd-light
+Rules-Requires-Root: no
+
+Package: aurora-kbd-light
+Architecture: arm64
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: keyboard backlight that follows the ambient light (Aurora)
+ aurora-kbd-light sets the keyboard backlight of Apple silicon MacBooks from
+ the ambient light sensor, as macOS does. Its service is enabled on every Mac
+ and skips machines without a keyboard backlight; a udev rule starts it when
+ the backlight or the light sensor registers after boot.

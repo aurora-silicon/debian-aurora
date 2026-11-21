@@ -1,0 +1,20 @@
+Source: aurora-xart
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), python3:native <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-xart
+Rules-Requires-Root: no
+
+Package: aurora-xart
+Architecture: all
+Multi-Arch: foreign
+Depends: python3, ${misc:Depends}
+Suggests: fprintd
+Description: Secure Enclave and xART state tool for Apple silicon Macs (Aurora)
+ aurora-xart inspects and manages the Linux side of the Secure Enclave and
+ its xART storage on Apple silicon Macs: it reports the state of the Touch ID
+ keybag and session records, and "aurora-xart reset-touchid" starts Touch ID
+ over when its keybag is stuck. With fprintd installed it opens the Touch ID
+ sensor before judging a stored keybag.

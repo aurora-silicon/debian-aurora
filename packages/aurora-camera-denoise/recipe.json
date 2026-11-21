@@ -1,0 +1,9 @@
+{
+  "source": "aurora-camera-denoise",
+  "version": "0.1.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-camera-denoise"},
+  "changes": "PipeWire filter that denoises the built-in camera of Apple silicon laptops, with its video-encoder and Neural Engine backends; the user service is enabled for every user, as alarm-aurora's user preset does.",
+  "alarm": ["aurora-camera-denoise"],
+  "notes": "Backends live in /usr/lib/<triplet>/aurora-camera-denoise (Debian's libdir); alarm-aurora uses /usr/lib/aurora-camera-denoise. The daemon has the directory built in."
+}

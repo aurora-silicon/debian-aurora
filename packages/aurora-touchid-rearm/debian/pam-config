@@ -1,0 +1,6 @@
+Name: Re-arm Touch ID with the password after a lockout
+Default: yes
+Priority: 64
+Auth-Type: Additional
+Auth:
+	optional	pam_aurora_touchid.so

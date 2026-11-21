@@ -1,0 +1,19 @@
+Source: aurora-m5-platform-config
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/alarm-aurora
+Rules-Requires-Root: no
+
+Package: aurora-m5-platform-config
+Architecture: all
+Multi-Arch: foreign
+Depends: systemd, coreutils, grep, sed, util-linux, bsdutils, ${misc:Depends}
+Description: MacBook Pro (M5 Pro) deep sleep configuration (Aurora)
+ Deep sleep on the MacBook Pro (M5 Pro, J714s): suspend is deep sleep only,
+ the lid suspends on battery, on AC and docked, and a system-sleep hook arms a
+ safety PMU RTC alarm before a suspend that has none, as the T6050 sleep
+ driver requires. The package is installed on every Mac and does nothing on
+ any Mac other than the J714s.

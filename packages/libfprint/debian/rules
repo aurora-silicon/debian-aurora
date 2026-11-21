@@ -1,0 +1,50 @@
+#!/usr/bin/make -f
+
+export DPKG_GENSYMBOLS_CHECK_LEVEL = 2
+# The aurora driver includes the kernel's <linux/apple-sep.h> (the /dev/sep-bio
+# ioctl ABI), which Debian's linux-libc-dev does not carry.
+export DEB_CFLAGS_MAINT_APPEND = -I$(CURDIR)/debian/aurora-uapi
+
+include /usr/share/dpkg/architecture.mk
+BUILDDIR = $(CURDIR)/obj-$(DEB_HOST_GNU_TYPE)
+
+# Configuration arguments
+CONFIG_ARGS = \
+	-Dudev_hwdb=enabled \
+	-Dudev_rules=enabled \
+	-Ddrivers=all \
+	-Dgtk-examples=false
+
+%:
+	dh $@
+
+# Cross builds run the host's fprint-list-udev-hwdb and g-ir-scanner through
+# cross-exe-wrapper.
+ifneq ($(DEB_BUILD_GNU_TYPE),$(DEB_HOST_GNU_TYPE))
+CONFIG_ARGS += --cross-file=$(CURDIR)/debian/exe-wrapper.ini \
+	--cross-file=/usr/share/meson/cross/$(DEB_HOST_GNU_TYPE)-gobject-introspection.ini
+endif
+
+override_dh_auto_configure:
+ifneq ($(DEB_BUILD_GNU_TYPE),$(DEB_HOST_GNU_TYPE))
+	printf "[binaries]\nexe_wrapper = '%s-cross-exe-wrapper'\n" $(DEB_HOST_GNU_TYPE) > debian/exe-wrapper.ini
+endif
+	dh_auto_configure -- $(CONFIG_ARGS)
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	python3 debian/aurora-checks/test_interface.py libfprint/drivers/aurora/aurora.c \
+		debian/aurora-uapi/linux/apple-sep.h
+	python3 debian/aurora-checks/test_lockout_reason.py libfprint/drivers/aurora/aurora.c
+endif
+	dh_auto_test -- -C $(BUILDDIR) --timeout-multiplier 5
+
+execute_after_dh_auto_install:
+	# fprintd's sandbox names the devices it may open: let it open the Touch ID
+	# device and read the lid switch that libfprint follows.
+	install -Dm644 debian/fprintd-lid-switch.conf \
+		debian/tmp/usr/lib/systemd/system/fprintd.service.d/50-libfprint-lid-switch.conf
+
+override_dh_auto_clean:
+	rm -rf tests/__pycache__ debian/aurora-checks/__pycache__ debian/exe-wrapper.ini
+	dh_auto_clean

@@ -1,0 +1,19 @@
+Source: aurora-camera-denoise
+Section: video
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), meson, ninja-build, pkgconf, libpipewire-0.3-dev (>= 1.0),
+ systemd-dev
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/camera-denoise
+Rules-Requires-Root: no
+
+Package: aurora-camera-denoise
+Architecture: arm64
+Depends: pipewire, ${misc:Depends}, ${shlibs:Depends}
+Description: denoising filter for the built-in camera (Aurora)
+ aurora-camera-denoise is a PipeWire filter that denoises the built-in camera
+ of Apple silicon laptops, as macOS filters it. It uses the video encoder's
+ temporal filter where the kernel has it, a Neural Engine low-light stage, or
+ a built-in CPU backend. The user service runs for every desktop user; a user
+ turns it off in denoise.conf or with "systemctl --user mask".

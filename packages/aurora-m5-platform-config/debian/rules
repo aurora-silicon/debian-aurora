@@ -1,0 +1,28 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	sh -n 50-aurora-m5-rtc-safety
+	grep -q "grep -qx 'apple,j714s' || exit 0" 50-aurora-m5-rtc-safety
+	grep -qx 'ConditionFirmware=device-tree-compatible(apple,j714s)' aurora-m5-sleep-policy.service
+	grep -qx 'MemorySleepMode=deep' 90-aurora-m5-deep.conf
+	grep -qx 'HandleLidSwitchDocked=suspend' 90-aurora-m5-lid.conf
+endif
+
+# The unit is wanted by sysinit.target itself (a static link, as in
+# alarm-aurora): a preset would not reach Macs that already have the package.
+# ConditionFirmware skips every Mac but the J714s. debian/postinst starts it
+# on installation, as alarm-aurora's install script does; an upgrade restarts
+# it when it ran, which writes the policy again.
+override_dh_auto_install:
+	install -Dm755 50-aurora-m5-rtc-safety debian/aurora-m5-platform-config/usr/lib/systemd/system-sleep/50-aurora-m5-rtc-safety
+	install -Dm644 aurora-m5-sleep-policy.service debian/aurora-m5-platform-config/usr/lib/systemd/system/aurora-m5-sleep-policy.service
+	install -d debian/aurora-m5-platform-config/usr/lib/systemd/system/sysinit.target.wants
+	ln -s ../aurora-m5-sleep-policy.service debian/aurora-m5-platform-config/usr/lib/systemd/system/sysinit.target.wants/aurora-m5-sleep-policy.service
+	install -Dm644 90-aurora-m5-deep.conf debian/aurora-m5-platform-config/usr/share/aurora-m5-platform-config/90-aurora-m5-deep.conf
+	install -Dm644 90-aurora-m5-lid.conf debian/aurora-m5-platform-config/usr/share/aurora-m5-platform-config/90-aurora-m5-lid.conf
+	install -Dm644 aurora-m5-sleep.conf debian/aurora-m5-platform-config/etc/aurora-m5-sleep.conf
+	install -Dm644 README.md debian/aurora-m5-platform-config/usr/share/doc/aurora-m5-platform-config/README.md

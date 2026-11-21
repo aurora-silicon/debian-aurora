@@ -1,0 +1,12 @@
+{
+  "source": "libfprint",
+  "version": "1:1.94.100-1+aurora1",
+  "kind": "upstream",
+  "upstream": {
+    "url": "https://gitlab.freedesktop.org/api/v4/projects/libfprint%2Flibfprint/repository/archive.tar.gz?sha=80a4b5ec612892c5c056c48dddaa561452cf37ec",
+    "sha256": "94ff7f3689d14da28389a4d9cad5fb523065bbed3e6c8e3694522fde1316e780"
+  },
+  "changes": "libfprint 1.94.100 (the libfprint-aurora pin) with Debian's 1:1.94.10-1 packaging and Aurora's patches: the aurora driver for Apple Touch ID (apple_sep, /dev/sep-bio, interfaces v4 and v5), retries and lockout reported by cause, fp_device_get_password_required(), lid-covered readers hidden while the lid is closed, and a close requested during suspend run after resume.\nfprintd may open /dev/sep-bio and read the lid switch (fprintd.service drop-in).\nlibfprint-2-2 provides libfprint-aurora.",
+  "alarm": ["libfprint-aurora"],
+  "notes": "Upstream rather than a rebuild: alarm-aurora and fedora-aurora both ship upstream 1.94.100 with these patches, which apply to it unchanged; Debian testing has 1.94.10, where the meson.build hunks do not apply and fp-device.c differs by several hundred lines. The version keeps Debian's epoch 1 and sorts above Debian's 1:1.94.10-1 (and above a future 1:1.94.100-1). The source is the libfprint-aurora pin in sources.json (a gitlab.freedesktop.org archive, so a URL rather than a pin key). debian/ is Debian's 1:1.94.10-1 packaging with the maintainer changed, the postinst udev triggers regenerated from 1.94.100's autosuspend.hwdb and the new symbol added."
+}

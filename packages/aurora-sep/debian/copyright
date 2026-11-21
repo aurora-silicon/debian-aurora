@@ -1,0 +1,14 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: aurora-sep
+Source: https://github.com/aurora-silicon/linux (tools/aurora-sep)
+
+Files: *
+Copyright: Aurora Silicon and the aurora-silicon/linux contributors
+License: GPL-2.0-only
+ The files come from tools/aurora-sep in aurora-silicon/linux with
+ alarm-aurora's and this repository's adaptations. The factory-record reader
+ and the sealed-record rebuild in aurora-touchid-setup are Erik Bourget's
+ work.
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 2 can be found in "/usr/share/common-licenses/GPL-2".

@@ -1,0 +1,17 @@
+Source: aurora-sep-sk
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), libssl-dev, pkgconf, openssh-client <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-sep-userspace
+Rules-Requires-Root: no
+
+Package: aurora-sep-sk
+Architecture: arm64
+Depends: aurora-sep, openssh-client, systemd, ${misc:Depends}, ${shlibs:Depends}
+Description: OpenSSH security-key provider for Secure Enclave keys
+ libaurora-sep-sk.so is an OpenSSH security-key provider. It makes ecdsa-sk
+ keys whose private key is created in, and never leaves, this Mac's Secure
+ Enclave (/dev/sep-key). Members of the sep-key group may create keys and
+ sign with the handles they hold.

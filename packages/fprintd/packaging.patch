@@ -1,0 +1,109 @@
+diff -Nru a/debian/control b/debian/control
+--- a/debian/control
++++ b/debian/control
+@@ -5,20 +5,21 @@
+ Uploaders: Marco Trevisan <marco@ubuntu.com>
+ Build-Depends: debhelper-compat (= 13),
+                dh-exec,
+-               libfprint-2-dev (>= 1:1.94.9),
++               libfprint-2-dev (>= 1:1.94.100-1+aurora1~),
+                libglib2.0-dev (>= 2.64),
+                libpam0g-dev,
+                libpolkit-gobject-1-dev,
+                libsystemd-dev (>= 235) [linux-any],
+                meson (>= 0.50.0),
+-               python3,
+-               python3-cairo,
+-               python3-dbus,
+-               python3-dbusmock,
++               python3:native,
++               python3-cairo <!nocheck>,
++               python3-dbus <!nocheck>,
++               python3-dbusmock <!nocheck>,
+                python3-gi <!nocheck>,
+-               python3-pypamtest,
+-               libpam-wrapper,
+-               libxml2-utils <!nocheck>
++               python3-pypamtest <!nocheck>,
++               libpam-wrapper <!nocheck>,
++               libxml2-utils <!nocheck>,
++               dbus-daemon <!nocheck>
+ Build-Depends-Indep: gtk-doc-tools <!nodoc>, xsltproc <!nodoc>
+ Standards-Version: 4.7.0
+ Homepage: https://www.freedesktop.org/wiki/Software/fprint/fprintd
+@@ -28,12 +29,17 @@
+ Package: fprintd
+ Architecture: any
+ Multi-Arch: foreign
+-Depends: dbus, polkitd, ${misc:Depends}, ${shlibs:Depends}
++Depends: dbus, polkitd, libfprint-aurora (>= 1:1.94.100-1+aurora1~), ${misc:Depends}, ${shlibs:Depends}
++Provides: fprintd-aurora (= ${binary:Version})
+ Description: D-Bus daemon for fingerprint reader access
+  fprintd is a D-Bus daemon that offers libfprint functionality over the
+  D-Bus interprocess communication bus. By adding this daemon layer above
+  libfprint, various problems related to multiple applications simultaneously
+  competing for fingerprint readers get solved.
++ .
++ This Aurora build keeps a print when deleting it from the device fails,
++ reports a Touch ID lockout and why the reader needs the password, and does
++ not ask for a finger the reader will not take.
+ 
+ Package: libpam-fprintd
+ Architecture: any
+@@ -52,6 +58,10 @@
+  .
+  This package provides a PAM module for fingerprint-based authentication
+  via fprintd.
++ .
++ The Aurora build enables it by default for sudo, sudo -i and polkit only, in
++ front of the password: the login screens, the console login, su and ssh
++ keep asking for the password. Use pam-auth-update to turn it off.
+ 
+ Package: fprintd-doc
+ Architecture: all
+diff -Nru a/debian/pam-configs/fprintd b/debian/pam-configs/fprintd
+--- a/debian/pam-configs/fprintd
++++ b/debian/pam-configs/fprintd
+@@ -1,7 +1,8 @@
+-Name: Fingerprint authentication
+-Default: no
++Name: Fingerprint authentication for sudo and polkit (Aurora Touch ID)
++Default: yes
+ Priority: 260
+ Conflicts: fprint
+ Auth-Type: Primary
+ Auth:
+-	[success=end default=ignore]	pam_fprintd.so max-tries=1 timeout=10 # debug
++	[success=ignore default=1]	pam_succeed_if.so service in sudo:sudo-i:polkit-1 quiet
++	[success=end default=ignore]	pam_fprintd.so
+diff -Nru a/debian/rules b/debian/rules
+--- a/debian/rules
++++ b/debian/rules
+@@ -1,6 +1,7 @@
+ #!/usr/bin/make -f
+ 
+ include /usr/share/dpkg/default.mk
++include /usr/share/dpkg/buildtools.mk
+ 
+ %:
+ 	dh $@
+@@ -22,3 +23,19 @@
+ override_dh_auto_configure:
+ 	dh_auto_configure -- $(CONFIG_ARGS)
+ 
++# The checks alarm-aurora runs on the Aurora patches, then Debian's tests.
++CHECKS = $(CURDIR)/debian/aurora-checks
++override_dh_auto_test:
++ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
++	python3 tests/aurora/test_account_gate.py src/device.c
++	rm -rf $(CHECKS) && mkdir -p $(CHECKS)
++	cp tests/aurora/test_password_switch.py tests/aurora/mock-fprintd.py $(CHECKS)/
++	ln -s $(BUILDDIR)/pam/pam_fprintd.so $(CHECKS)/pam_fprintd-switch.so
++	$(CC) -DMOCK_PASSWORD -fPIC -shared -o $(CHECKS)/pam_mock_password.so tests/aurora/pam-test.c -lpam
++	$(CC) -o $(CHECKS)/pam-test tests/aurora/pam-test.c -lpam
++	python3 $(CHECKS)/test_password_switch.py
++endif
++	dh_auto_test
++
++execute_after_dh_auto_clean:
++	rm -rf $(CHECKS)

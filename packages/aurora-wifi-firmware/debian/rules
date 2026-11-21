@@ -1,0 +1,22 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+# setup.py at the top is the installer's, not this tool's build.
+override_dh_auto_clean override_dh_auto_configure override_dh_auto_build:
+
+# Pure Python: the tests run in every build, cross builds included.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	python3 -I -m unittest discover -s tests -p 'test_wifi_firmware_*.py'
+endif
+
+override_dh_auto_install:
+	$(MAKE) -C tools/wifi-firmware install DESTDIR=$(CURDIR)/debian/aurora-wifi-firmware PREFIX=/usr \
+	  UNITDIR=/usr/lib/systemd/system PYTHON=/usr/bin/python3
+
+# Enabled as alarm-aurora's preset enables it. It runs at the next boot:
+# installing does not start it, and an upgrade does not stop or rerun it.
+override_dh_installsystemd:
+	dh_installsystemd --no-start --no-stop-on-upgrade

@@ -1,0 +1,28 @@
+Source: aurora-sep-luks
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), libcryptsetup-dev, libjson-c-dev, libpam0g-dev, pkgconf
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-sep-userspace
+Rules-Requires-Root: no
+
+Package: aurora-sep-luks
+Architecture: arm64
+Depends: aurora-sep, libpam-runtime, ${misc:Depends}, ${shlibs:Depends}
+Recommends: cryptsetup-bin
+Suggests: dracut
+Description: Unlock LUKS2 volumes with the Apple Secure Enclave
+ aurora-sep-cryptenroll enrolls this Mac's Secure Enclave as an unlock method
+ of a LUKS2 volume, like systemd-cryptenroll --tpm2-device=auto does with a
+ TPM. The keyslot secret is wrapped by a kernel trusted key that the apple_sep
+ driver seals, and the libcryptsetup token plugin lets cryptsetup and
+ systemd-cryptsetup unlock enrolled volumes without a passphrase. The
+ passphrase keyslot is always kept. Nothing is enrolled by installing this
+ package.
+ .
+ aurora-sep-fde unlocks a volume with a user's password, checked by the
+ Secure Enclave (the FileVault model), and pam_aurora_sep_fde keeps the disk
+ password equal to the login password when it changes. The 90aurora-sep
+ dracut module opens enrolled volumes, the root volume included, in the
+ initramfs.

@@ -1,0 +1,8 @@
+{
+  "source": "aurora-sep",
+  "version": "1.28",
+  "kind": "native",
+  "changes": "SEP trusted-key and Touch ID integration for Aurora, from alarm-aurora's aurora-sep 1-28 (files from tools/aurora-sep in aurora-silicon/linux with alarm-aurora's adaptations): the aurora-sep timer and loader, Touch ID readiness, the calibration setup (aurora-touchid-setup), the fprintd drop-ins, the opt-in GNOME login-screen fingerprint unit, the power-button and suspend policy and aurora-sep status.\nTouch ID's PAM lines come from Aurora's libpam-fprintd (sudo, sudo -i and polkit only) and aurora-touchid-rearm, through pam-auth-update, instead of alarm-aurora's touchid-pam pacman hook.\nThe dracut configuration from fedora-aurora keeps apple_sep out of the initramfs, as the modprobe.d blacklist does.",
+  "alarm": ["aurora-sep"],
+  "notes": "Native, not upstream: alarm-aurora's recipe takes no archive; its sources are the files from the Aurora linux tree (pinned in its provenance.json) with distribution adaptations, all in the recipe directory, as here. Deviations: aurora-touchid-setup is in /usr/sbin (Debian's place for admin commands; alarm uses /usr/bin, which is /usr/sbin on Arch); touchid-pam and its pacman hook are not shipped; README.md describes the Debian PAM profiles; the greeter script names libglib2.0-bin for gresource; /usr/lib/dracut/dracut.conf.d/90-aurora-sep.conf is fedora-aurora's; no preset file (aurora-boot enables aurora-sep.timer). No Conflicts on linux-aurora: Debian's linux-aurora starts at 7.3.0, after alarm-aurora's 7.2.10-4 cut-off."
+}

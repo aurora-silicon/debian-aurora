@@ -1,0 +1,24 @@
+Source: aurora-fido
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), libjson-c-dev, pkgconf,
+ python3:native <!nocheck>, python3-cryptography:native <!nocheck>, python3-jeepney:native <!nocheck>,
+ dbus-daemon <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-sep-userspace
+Rules-Requires-Root: no
+
+Package: aurora-fido
+Architecture: arm64
+Depends: aurora-sep, python3, python3-cryptography, systemd, ${misc:Depends}, ${shlibs:Depends}
+Suggests: libnotify-bin, fido2-tools, libpam-u2f, python3-jeepney
+Description: Touch ID as a FIDO2/U2F security key
+ aurora-fido makes this Mac's Secure Enclave and Touch ID a FIDO2/U2F
+ security key: a uhid device that browsers (WebAuthn), OpenSSH (ecdsa-sk)
+ and pam_u2f use like any USB key. Its keys live in the Secure Enclave,
+ which checks the Touch ID match inside each signature.
+ .
+ It is opt in and installed off: "sudo aurora-fido enable" turns it on.
+ python3-jeepney is needed for the per-user passkey agent (vault = user),
+ libnotify-bin for the "Touch ID to sign in" notification.

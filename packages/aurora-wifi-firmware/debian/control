@@ -1,0 +1,22 @@
+Source: aurora-wifi-firmware
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), python3:native <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-installer/tree/main/tools/wifi-firmware
+Rules-Requires-Root: no
+
+Package: aurora-wifi-firmware
+Architecture: all
+Multi-Arch: foreign
+Depends: python3, util-linux, mount, systemd, ${misc:Depends}
+Recommends: liblzfse1
+Description: Wi-Fi and Bluetooth firmware from the installed macOS (Aurora)
+ macOS runs the Wi-Fi and Bluetooth firmware its system volume ships. At every
+ boot aurora-wifi-firmware compares the installed macOS's firmware with the
+ EFI system partition's and, when macOS has newer firmware, puts it on the
+ ESP for the next boot, with a backup. The boot after a change checks that
+ the drivers came up with it and puts the previous files back if they did
+ not. Nothing is reloaded in the running boot. liblzfse1 reads
+ LZFSE-compressed files on the macOS volume.

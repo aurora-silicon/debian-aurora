@@ -1,0 +1,9 @@
+{
+  "source": "fprintd",
+  "version": "1.94.5-4+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "fprintd", "version": "1.94.5-4"},
+  "changes": "Aurora's fprintd patches (the same as alarm-aurora's fprintd-aurora): keep a print when deleting it from the device fails, report a Touch ID lockout and fall back to the password, say why the reader needs the password, do not ask for a finger the reader will not take, and the opt-in polkit password switch (off unless polkit-password-switch is added to the PAM line).\nBuild against Aurora's libfprint (fp-device.h error codes for the lockout and password reasons) and depend on it; fprintd provides fprintd-aurora.\nThe pam-auth-update profile is on by default and offers a fingerprint to sudo, sudo -i and polkit-1 only, in front of the password, as alarm-aurora does; every other service that includes common-auth asks for the password.\nRun alarm-aurora's checks (account gate, password switch) before Debian's tests.",
+  "alarm": ["fprintd-aurora"],
+  "notes": "Patches 0001-0005 apply unchanged on Debian's 1.94.5-4 (0005 with offsets). 0006 adds alarm-aurora's check scripts as tests/aurora/. packaging.patch changes the pam-configs profile, Build-Depends and Depends on Aurora's libfprint, the descriptions, and debian/rules to run the checks."
+}

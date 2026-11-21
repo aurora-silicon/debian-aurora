@@ -1,0 +1,11 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: aurora-sep-userspace
+Source: https://github.com/aurora-silicon/aurora-sep-userspace
+
+Files: *
+Copyright: Aurora Silicon
+License: GPL-2.0-only
+ touchid-rearm/ is GPL-2.0-only (LICENSES/GPL-2.0-only.txt in the source).
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 2 can be found in "/usr/share/common-licenses/GPL-2".

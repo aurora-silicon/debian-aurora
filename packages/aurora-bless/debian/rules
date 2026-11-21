@@ -1,0 +1,65 @@
+#!/usr/bin/make -f
+# Builds the four tools of the pinned workspace as alarm-aurora does. cargo
+# fetches the crates of Cargo.lock (the recipe allows network).
+include /usr/share/dpkg/architecture.mk
+include /usr/share/rustc/architecture.mk
+
+export CARGO_HOME := $(CURDIR)/debian/.cargo
+export CARGO_TARGET_DIR := $(CURDIR)/target
+export CARGO_TARGET_$(shell echo $(DEB_HOST_RUST_TYPE) | tr a-z- A-Z_)_LINKER := $(DEB_HOST_GNU_TYPE)-gcc
+# libdbus-sys finds libdbus-1 with the host's pkg-config.
+export PKG_CONFIG_ALLOW_CROSS := 1
+export PKG_CONFIG_$(subst -,_,$(DEB_HOST_RUST_TYPE)) := $(DEB_HOST_GNU_TYPE)-pkg-config
+JOBS := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+CARGO := cargo
+BUILD := --locked -j$(or $(JOBS),1) --target $(DEB_HOST_RUST_TYPE)
+PACKAGES := -p asahi-bless -p aurora-nvram -p aurora-btsync -p aurora-panel-nits
+BIN := target/$(DEB_HOST_RUST_TYPE)/release
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	$(CARGO) fetch --locked --target $(DEB_HOST_RUST_TYPE)
+
+override_dh_auto_build:
+	$(CARGO) build $(BUILD) --release $(PACKAGES)
+
+# The tests run where the build machine can run the host's code.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+ifeq ($(DEB_BUILD_GNU_TYPE),$(DEB_HOST_GNU_TYPE))
+	$(CARGO) test $(BUILD) -p asahi-bless -p apple-nvram -p aurora-nvram -p aurora-btsync \
+	  -p aurora-panel-nits
+endif
+endif
+
+override_dh_auto_install:
+	install -Dm755 $(BIN)/asahi-bless debian/aurora-bless/usr/bin/aurora-bless
+	ln -s aurora-bless debian/aurora-bless/usr/bin/asahi-bless
+	install -Dm755 $(BIN)/aurora-nvram debian/aurora-nvram/usr/bin/aurora-nvram
+	ln -s aurora-nvram debian/aurora-nvram/usr/bin/asahi-nvram
+	install -Dm644 aurora-nvram/README.md debian/aurora-nvram/usr/share/doc/aurora-nvram/README.md
+	install -Dm644 NEO.md debian/aurora-nvram/usr/share/doc/aurora-nvram/NEO.md
+	install -Dm755 $(BIN)/aurora-btsync debian/aurora-btsync/usr/bin/aurora-btsync
+	ln -s aurora-btsync debian/aurora-btsync/usr/bin/asahi-btsync
+	install -Dm644 aurora-btsync/etc/systemd/system/aurora-btsync.service \
+	  debian/aurora-btsync/usr/lib/systemd/system/aurora-btsync.service
+	ln -s aurora-btsync.service debian/aurora-btsync/usr/lib/systemd/system/asahi-btsync.service
+	install -Dm644 aurora-btsync/etc/udev/rules.d/96-aurora-btsync.rules \
+	  debian/aurora-btsync/usr/lib/udev/rules.d/96-aurora-btsync.rules
+	install -Dm644 aurora-btsync/README.md debian/aurora-btsync/usr/share/doc/aurora-btsync/README.md
+	$(MAKE) -C aurora-panel-nits install DESTDIR=$(CURDIR)/debian/aurora-panel-nits PREFIX=/usr \
+	  BIN=$(CURDIR)/$(BIN)/aurora-panel-nits
+	install -Dm644 aurora-panel-nits/README.md debian/aurora-panel-nits/usr/share/doc/aurora-panel-nits/README.md
+
+# Nothing is enabled, as in alarm-aurora: udev starts both services when
+# their devices appear. aurora-btsync is a one-shot sync that an upgrade
+# leaves alone; aurora-panel-nits restarts on upgrade when it runs.
+override_dh_installsystemd:
+	dh_installsystemd -paurora-btsync --no-enable --no-start --no-stop-on-upgrade
+	dh_installsystemd -paurora-panel-nits --no-start --restart-after-upgrade
+
+override_dh_clean:
+	dh_clean
+	rm -rf debian/.cargo target

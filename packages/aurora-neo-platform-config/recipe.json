@@ -1,0 +1,8 @@
+{
+  "source": "aurora-neo-platform-config",
+  "version": "0.1.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-neo-platform-config"},
+  "changes": "Driver-scoped NetworkManager and trackpad configuration for the MacBook Neo (J700), as alarm-aurora packages it.",
+  "alarm": ["aurora-neo-platform-config"]
+}

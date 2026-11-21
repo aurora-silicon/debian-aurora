@@ -1,0 +1,24 @@
+Source: aurora-diag
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), python3:native <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-diag
+Rules-Requires-Root: no
+
+Package: aurora-diag
+Architecture: all
+Multi-Arch: foreign
+Depends: python3, ${misc:Depends}
+Suggests: python3-textual, alsa-utils, vulkan-tools, mesa-utils, iw, smartmontools, bluez,
+ libglib2.0-bin
+Description: bring-up diagnostics for Apple silicon Macs (Aurora, development)
+ aurora-diag collects bring-up diagnostics and runs regression checks on Apple
+ silicon Macs; aurora-panic-log reads the panic log. It is a development tool.
+ .
+ Optional helpers: python3-textual (the dashboard), alsa-utils (ALSA
+ controls), vulkan-tools (vulkaninfo), mesa-utils (eglinfo, glxinfo), iw
+ (Wi-Fi link and regulatory domain), smartmontools (NVMe health), bluez
+ (Bluetooth controller and paired devices) and libglib2.0-bin (Mutter power
+ save through gdbus).

@@ -1,0 +1,21 @@
+Source: aurora-touchid-rearm
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), libpam0g-dev, python3:native <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-sep-userspace
+Rules-Requires-Root: no
+
+Package: aurora-touchid-rearm
+Architecture: arm64
+Depends: libpam-runtime, ${misc:Depends}, ${shlibs:Depends}
+Description: Re-arm Touch ID with the password after a lockout
+ After too many failed matches the Secure Enclave stops matching and the
+ apple_sep driver refuses every verify until a password authentication, as
+ macOS asks for the password. pam_aurora_touchid hands a password that the
+ PAM stack has just accepted to aurora-touchid-rearm, which checks it again
+ and re-arms Touch ID.
+ .
+ By default the first login or unlock after boot also needs the password, as
+ on macOS (require_password_after_boot in /etc/aurora/touchid.conf).

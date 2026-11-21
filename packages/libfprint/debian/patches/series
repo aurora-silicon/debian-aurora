@@ -1,0 +1,11 @@
+0001-apple-sep.patch
+0002-aurora-report-unusable-captures-as-retries.patch
+0003-hide-lid-covered-readers-while-the-lid-is-closed.patch
+0004-aurora-refuse-unbound-enrollment.patch
+0005-aurora-support-v4-and-v5.patch
+0006-aurora-report-finger-lift-and-lockout.patch
+0007-aurora-name-retry-causes-and-keep-waiting.patch
+0008-aurora-report-the-touch-id-lockout-as-locked-out.patch
+0009-aurora-say-why-touch-id-needs-the-password.patch
+0010-let-a-front-end-ask-whether-the-reader-needs-the-password.patch
+0011-run-a-close-requested-during-suspend-after-resume.patch

@@ -1,0 +1,8 @@
+{
+  "source": "aurora-kbd-light",
+  "version": "0.1.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-kbd-light"},
+  "changes": "Keyboard backlight that follows the ambient light sensor on Apple silicon MacBooks, enabled on every Mac as in alarm-aurora, with its udev rule that starts it when the backlight or the sensor appears.",
+  "alarm": ["aurora-kbd-light"]
+}

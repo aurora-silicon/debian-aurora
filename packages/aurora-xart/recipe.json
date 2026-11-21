@@ -1,0 +1,8 @@
+{
+  "source": "aurora-xart",
+  "version": "0.2.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-xart"},
+  "changes": "Aurora's tool to inspect and manage the Linux side of the Secure Enclave and xART state on Apple silicon Macs, as alarm-aurora packages it.",
+  "alarm": ["aurora-xart"]
+}

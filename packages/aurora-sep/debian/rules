@@ -1,0 +1,48 @@
+#!/usr/bin/make -f
+PKG = debian/aurora-sep
+UNITDIR = $(PKG)/usr/lib/systemd/system
+UNITS = aurora-sep.service aurora-sep-ready.service aurora-sep.timer \
+	aurora-sep-greeter-fingerprint.service aurora-touchid-setup.service
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	install -Dm755 load-driver $(PKG)/usr/libexec/aurora-sep-load
+	install -Dm755 aurora-sep-ready $(PKG)/usr/libexec/aurora-sep-ready
+	install -Dm755 aurora-sep-greeter-fingerprint $(PKG)/usr/libexec/aurora-sep-greeter-fingerprint
+	install -Dm755 sensor-present $(PKG)/usr/libexec/aurora-sep-sensor-present
+	install -Dm755 aurora-sep $(PKG)/usr/bin/aurora-sep
+	install -Dm755 aurora-touchid-setup $(PKG)/usr/sbin/aurora-touchid-setup
+	install -Dm755 extract-mesa-calibration $(PKG)/usr/libexec/aurora/extract-mesa-calibration
+	install -Dm755 touchid-setup-needed $(PKG)/usr/libexec/aurora/touchid-setup-needed
+	for unit in $(UNITS); do \
+		sed 's|/usr/local/sbin/|/usr/libexec/|g' $$unit > debian/unit.tmp && \
+		install -Dm644 debian/unit.tmp $(UNITDIR)/$$unit || exit 1; \
+	done
+	rm -f debian/unit.tmp
+	! grep -rq /usr/local $(UNITDIR)
+	install -Dm644 aurora-sep-load.conf $(PKG)/usr/lib/modprobe.d/aurora-sep-load.conf
+	install -Dm644 90-aurora-sep.conf $(PKG)/usr/lib/dracut/dracut.conf.d/90-aurora-sep.conf
+	install -Dm644 fprintd-aurora.conf $(UNITDIR)/fprintd.service.d/aurora-sep.conf
+	sed 's|@FPRINTD@|/usr/libexec/fprintd|' fprintd-no-timeout.conf.in > $(UNITDIR)/fprintd.service.d/50-aurora-sep-no-timeout.conf
+	# Early safe default; later distribution or administrator power-key policy wins.
+	install -Dm644 logind-aurora-sep.conf $(PKG)/usr/lib/systemd/logind.conf.d/05-aurora-sep.conf
+	# The suspend policy applies even when SEP initialization is skipped.
+	install -Dm644 20-aurora-suspend.conf $(PKG)/usr/lib/systemd/sleep.conf.d/20-aurora-suspend.conf
+	# Ordering only: a sleep never starts the loader or retries a failed load.
+	for unit in systemd-suspend systemd-hybrid-sleep systemd-suspend-then-hibernate; do \
+		install -Dm644 sleep-aurora-sep.conf $(UNITDIR)/$$unit.service.d/aurora-sep.conf || exit 1; \
+	done
+	install -Dm644 powerdevilrc $(PKG)/etc/xdg/powerdevilrc
+
+# aurora-sep.timer is enabled as alarm-aurora's preset does; the greeter unit
+# stays off until enabled. Nothing starts at installation or restarts on
+# upgrade: the enclave takes one attach per boot.
+override_dh_installsystemd:
+	dh_installsystemd --no-start aurora-sep.timer
+	dh_installsystemd --no-enable --no-start aurora-sep-greeter-fingerprint.service
+
+# The units and scripts name README.md and XART-SAFETY.md.
+override_dh_compress:
+	dh_compress -X.md

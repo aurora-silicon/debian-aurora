@@ -1,0 +1,15 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+# Configuration checks against a staged install; they run in every build.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	sh tests/run.sh
+endif
+
+override_dh_auto_install:
+	$(MAKE) install DESTDIR=$(CURDIR)/debian/aurora-neo-platform-config PREFIX=/usr

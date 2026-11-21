@@ -1,0 +1,9 @@
+{
+  "source": "aurora-sep-sk",
+  "version": "0.1.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-sep-sk"},
+  "changes": "OpenSSH security-key provider for ecdsa-sk keys in the Secure Enclave (aurora-sep-userspace sk/ at the aurora-sep-sk pin), with the udev rule that gives the sep-key group /dev/sep-key and the sysusers.d entry that creates the group.",
+  "alarm": ["aurora-sep-sk"],
+  "notes": "The provider is /usr/lib/<triplet>/libaurora-sep-sk.so (Debian's library directory) rather than alarm-aurora's /usr/lib/libaurora-sep-sk.so; use that path with ssh-keygen -w or SecurityKeyProvider. The upstream ssh-sk.md shows Fedora's /usr/lib64 path."
+}

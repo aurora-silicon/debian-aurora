@@ -1,0 +1,18 @@
+Source: aurora-neo-platform-config
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-neo-platform-config
+Rules-Requires-Root: no
+
+Package: aurora-neo-platform-config
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: MacBook Neo NetworkManager and trackpad configuration (Aurora)
+ Configuration for the MacBook Neo (J700), scoped to its hardware so that it
+ does nothing on other Macs: a NetworkManager snippet that matches only the
+ mt7932-fullmac Wi-Fi driver (no scan MAC randomisation, the permanent MAC
+ address) and libinput quirks for the J700 trackpad.

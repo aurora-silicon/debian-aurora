@@ -1,0 +1,10 @@
+{
+  "source": "aurora-bless",
+  "version": "0.4.4.aurora5-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-bless"},
+  "network": true,
+  "changes": "Aurora's startup-volume selector with MacBook Neo NVRAM support, and from the same workspace aurora-nvram, aurora-btsync and aurora-panel-nits; they replace Debian's asahi-bless, asahi-nvram and asahi-btsync.",
+  "alarm": ["aurora-bless", "aurora-nvram", "aurora-btsync", "aurora-panel-nits"],
+  "notes": "cargo fetches the crates of the pinned Cargo.lock (--locked), as alarm-aurora's build does; Debian's rustc and cargo build them."
+}

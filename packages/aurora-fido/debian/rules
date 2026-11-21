@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+include /usr/share/dpkg/buildtools.mk
+
+FIDO_ARGS = PKG_CONFIG=$(PKG_CONFIG) LIBEXECDIR=/usr/lib/aurora-fido
+
+%:
+	dh $@ --sourcedirectory=fido
+
+override_dh_auto_build:
+	dh_auto_build -- $(FIDO_ARGS)
+
+# Unit tests: software stand-ins, no root, no hardware.
+override_dh_auto_test:
+	dh_auto_test -- $(FIDO_ARGS)
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/aurora-fido -- $(FIDO_ARGS) PREFIX=/usr
+
+# Opt in: `aurora-fido enable` turns the system unit on; the user unit is for
+# vault = user. Neither is enabled or started by installing.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
+
+override_dh_installsystemduser:
+	dh_installsystemduser --no-enable
+
+# The units and `aurora-fido status` name fido.md.
+override_dh_compress:
+	dh_compress -X.md

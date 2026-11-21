@@ -1,0 +1,31 @@
+#!/usr/bin/make -f
+include /usr/share/dpkg/architecture.mk
+
+MAKE_ARGS = WARN='-Wall -Wextra'
+
+%:
+	dh $@ --sourcedirectory=touchid-rearm
+
+override_dh_auto_build:
+	dh_auto_build -- $(MAKE_ARGS)
+
+override_dh_auto_test:
+	dh_auto_test -- $(MAKE_ARGS)
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/aurora-touchid-rearm -- $(MAKE_ARGS) \
+		LIBEXECDIR=/usr/libexec PAMDIR=/usr/lib/$(DEB_HOST_MULTIARCH)/security \
+		PAMCONFDIR=/etc/pam.d UNITDIR=/usr/lib/systemd/system SYSCONFDIR=/etc \
+		DOCDIR=/usr/share/doc/aurora-touchid-rearm
+	install -Dm644 debian/pam-config \
+		debian/aurora-touchid-rearm/usr/share/pam-configs/aurora-touchid-rearm
+
+# Enabled as alarm-aurora's preset does. Only the socket starts at once: the
+# boot service applies require_password_after_boot at the next boot.
+override_dh_installsystemd:
+	dh_installsystemd aurora-touchid-rearm.socket
+	dh_installsystemd --no-start aurora-touchid-boot.service
+
+# The units name README.md as their documentation.
+override_dh_compress:
+	dh_compress -X.md

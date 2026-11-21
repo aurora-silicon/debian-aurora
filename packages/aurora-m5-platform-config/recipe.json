@@ -1,0 +1,7 @@
+{
+  "source": "aurora-m5-platform-config",
+  "version": "1",
+  "kind": "native",
+  "changes": "Deep sleep and lid policy for the MacBook Pro (M5 Pro, J714s) with the safety RTC alarm hook, from alarm-aurora's recipe; every other Mac skips it.",
+  "alarm": ["aurora-m5-platform-config"]
+}

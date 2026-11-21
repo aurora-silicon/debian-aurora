@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@
+
+# The daemon looks for its backends in <prefix>/<libdir>/aurora-camera-denoise,
+# Debian's multiarch libdir here. No Vulkan backend, as in alarm-aurora.
+override_dh_auto_configure:
+	dh_auto_configure -- -Ddaemon=enabled -Dgpu=disabled -Dsystemduserunitdir=/usr/lib/systemd/user
+
+override_dh_auto_test:
+	dh_auto_test -- --print-errorlogs

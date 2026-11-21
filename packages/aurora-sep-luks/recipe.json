@@ -1,0 +1,9 @@
+{
+  "source": "aurora-sep-luks",
+  "version": "0.3.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aurora-sep-luks"},
+  "changes": "Unlock LUKS2 volumes with the Apple Secure Enclave (aurora-sep-userspace luks/ at the aurora-sep-luks pin): aurora-sep-cryptenroll, aurora-sep-fde, the libcryptsetup token plugin, pam_aurora_sep_fde and the 90aurora-sep dracut module. Nothing is enrolled by installing.\nA password change through common-password also changes the user's disk password: pam_aurora_sep_fde goes into its additional block through a pam-auth-update profile.",
+  "alarm": ["aurora-sep-luks"],
+  "notes": "alarm-aurora installs the mkinitcpio hook (install-mkinitcpio) and its sep-fde-pam pacman hook rewrites the pam_unix password line of /etc/pam.d/system-auth. Debian has no mkinitcpio: this package installs upstream's dracut module (install-dracut, as fedora-aurora does); initramfs-tools has no aurora-sep hook. The PAM line is a pam-auth-update profile (Password-Type: Additional), reached only when the primary block (pam_unix) changed the password, which is what alarm's rewrite achieves. The token plugin is in Debian's libcryptsetup token directory (/usr/lib/<triplet>/cryptsetup) and the PAM module in /usr/lib/<triplet>/security."
+}

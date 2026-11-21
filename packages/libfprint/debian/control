@@ -1,0 +1,153 @@
+Source: libfprint
+Priority: optional
+Section: libs
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13),
+               cross-exe-wrapper <cross>,
+               dh-sequence-gir,
+               gir1.2-gobject-2.0-dev,
+               gir1.2-gio-2.0-dev,
+               gobject-introspection,
+               gtk-doc-tools,
+               libcairo-dev <!nocheck>,
+               libglib2.0-dev,
+               libgudev-1.0-dev,
+               libgusb-dev,
+               libpixman-1-dev,
+               libssl-dev,
+               meson,
+               python3 <!nocheck>,
+               python3-cairo <!nocheck>,
+               python3-gi <!nocheck>,
+               systemd-dev,
+               umockdev <!nocheck>
+Build-Depends-Indep: libglib2.0-doc <!nodoc>, libgusb-doc <!nodoc !cross>
+Standards-Version: 4.7.0
+Homepage: https://www.freedesktop.org/wiki/Software/fprint/libfprint
+Rules-Requires-Root: no
+
+Package: libfprint-2-2
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Provides: libfprint-aurora (= ${binary:Version})
+Description: async fingerprint library of fprint project, shared libraries
+ The fprint project aims to support for consumer fingerprint reader devices.
+ .
+ Previously, Linux support for such devices has been scattered amongst different
+ projects (many incomplete) and inconsistent in that application developers
+ would have to implement support for each type of fingerprint reader separately.
+ The idea is to change that by providing a central system to support all the
+ fingerprint readers as it's possible to get hands on.
+ .
+ libfprint is the centre of efforts, this component does the dirty job of
+ talking to fingerprint reading devices, and processing fingerprint data.
+ .
+ This library depends on the new libusb, which performs asynchronous callbacks,
+ allowing fprint to perform non-blocking device tasks.
+ .
+ This package provides shared libraries.
+ .
+ This Aurora build adds the aurora driver for Apple Touch ID, which talks to
+ the apple_sep kernel driver through /dev/sep-bio, and hides a reader that a
+ closed laptop lid covers.
+
+Package: libfprint-2-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: gir1.2-fprint-2.0 (= ${binary:Version}),
+         libfprint-2-2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${gir:Depends},
+Provides: ${gir:Provides},
+Suggests: libfprint-2-doc
+Description: async fingerprint library of fprint project, development headers
+ The fprint project aims to support for consumer fingerprint reader devices.
+ .
+ Previously, Linux support for such devices has been scattered amongst different
+ projects (many incomplete) and inconsistent in that application developers
+ would have to implement support for each type of fingerprint reader separately.
+ The idea is to change that by providing a central system to support all the
+ fingerprint readers as it's possible to get hands on.
+ .
+ libfprint is the centre of efforts, this component does the dirty job of
+ talking to fingerprint reading devices, and processing fingerprint data.
+ .
+ This library depends on the new libusb, which performs asynchronous callbacks,
+ allowing fprint to perform non-blocking device tasks.
+ .
+ This package provides development headers.
+
+Package: libfprint-2-doc
+Section: doc
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: async fingerprint library of fprint project, API documentation
+ The fprint project aims to support for consumer fingerprint reader devices.
+ .
+ Previously, Linux support for such devices has been scattered amongst different
+ projects (many incomplete) and inconsistent in that application developers
+ would have to implement support for each type of fingerprint reader separately.
+ The idea is to change that by providing a central system to support all the
+ fingerprint readers as it's possible to get hands on.
+ .
+ libfprint is the centre of efforts, this component does the dirty job of
+ talking to fingerprint reading devices, and processing fingerprint data.
+ .
+ This library depends on the new libusb, which performs asynchronous callbacks,
+ allowing fprint to perform non-blocking device tasks.
+ .
+ This package provides the API documentation.
+
+Package: gir1.2-fprint-2.0
+Architecture: any
+Multi-Arch: same
+Section: introspection
+Depends: ${gir:Depends}, ${misc:Depends}, ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Description: async fingerprint library of fprint project, gir bindings
+ The fprint project aims to support for consumer fingerprint reader devices.
+ .
+ Previously, Linux support for such devices has been scattered amongst different
+ projects (many incomplete) and inconsistent in that application developers
+ would have to implement support for each type of fingerprint reader separately.
+ The idea is to change that by providing a central system to support all the
+ fingerprint readers as it's possible to get hands on.
+ .
+ libfprint is the centre of efforts, this component does the dirty job of
+ talking to fingerprint reading devices, and processing fingerprint data.
+ .
+ This library depends on the new libusb, which performs asynchronous callbacks,
+ allowing fprint to perform non-blocking device tasks.
+ .
+ This package can be used by other packages using the GIRepository format to
+ generate dynamic bindings.
+
+Package: libfprint-2-tests
+Architecture: any
+Depends: gir1.2-fprint-2.0 (= ${binary:Version}),
+         libfprint-2-2 (= ${binary:Version}),
+         python3,
+         python3-cairo,
+         python3-gi,
+         umockdev,
+         ${misc:Depends}, ${shlibs:Depends}
+Description: Tests for async fingerprint library of fprint project
+ The fprint project aims to support for consumer fingerprint reader devices.
+ .
+ Previously, Linux support for such devices has been scattered amongst different
+ projects (many incomplete) and inconsistent in that application developers
+ would have to implement support for each type of fingerprint reader separately.
+ The idea is to change that by providing a central system to support all the
+ fingerprint readers as it's possible to get hands on.
+ .
+ libfprint is the centre of efforts, this component does the dirty job of
+ talking to fingerprint reading devices, and processing fingerprint data.
+ .
+ This library depends on the new libusb, which performs asynchronous callbacks,
+ allowing fprint to perform non-blocking device tasks.
+ .
+ This package contains test programs, designed to be run as part of a
+ regression testsuite.

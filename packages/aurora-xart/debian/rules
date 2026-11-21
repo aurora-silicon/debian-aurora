@@ -1,0 +1,15 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+# Pure Python: the tests run in every build, cross builds included.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	$(MAKE) check PYTHON=python3
+endif
+
+override_dh_auto_install:
+	$(MAKE) install DESTDIR=$(CURDIR)/debian/aurora-xart PREFIX=/usr

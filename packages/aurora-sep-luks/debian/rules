@@ -1,0 +1,47 @@
+#!/usr/bin/make -f
+include /usr/share/dpkg/architecture.mk
+include /usr/share/dpkg/buildtools.mk
+
+INSTALL_ARGS = PREFIX=/usr TOKENDIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cryptsetup \
+	LIBEXECDIR=/usr/libexec PAMDIR=/usr/lib/$(DEB_HOST_MULTIARCH)/security \
+	SYSCONFDIR=/etc UNITDIR=/usr/lib/systemd/system
+
+%:
+	dh $@ --sourcedirectory=luks
+
+override_dh_auto_build:
+	dh_auto_build -- PKG_CONFIG=$(PKG_CONFIG)
+
+# As alarm-aurora: kernel "user" keys stand in for the SEP. 77: the build
+# root blocks the kernel keyring, skipped. A kernel with af_alg_restrict
+# refuses an unprivileged ccm(aes) bind, which stops the test at its seal
+# step after the encoding checks; that alone is not a failure. The LUKS2
+# image tests need root and run in aurora-sep-userspace's CI.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	$(MAKE) -C luks test/test-seal PKG_CONFIG=$(PKG_CONFIG)
+	status=0; luks/test/test-seal >debian/test-seal.log 2>&1 || status=$$?; \
+	cat debian/test-seal.log; \
+	if [ $$status = 1 ] && [ "$$(grep -c '^FAIL' debian/test-seal.log)" = 1 ] && \
+	   grep -qx 'seal failed: No such file or directory' debian/test-seal.log; then \
+		echo "AF_ALG ccm(aes) is restricted in this build root; seal round trip not run"; \
+	elif [ $$status != 0 ] && [ $$status != 77 ]; then \
+		exit 1; \
+	fi
+endif
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/aurora-sep-luks -- $(INSTALL_ARGS) PKG_CONFIG=$(PKG_CONFIG) \
+		install install-dracut
+	test -x debian/aurora-sep-luks/usr/lib/$(DEB_HOST_MULTIARCH)/security/pam_aurora_sep_fde.so
+	test -x debian/aurora-sep-luks/usr/libexec/aurora-sep-fde-passwd
+	install -Dm644 debian/pam-config debian/aurora-sep-luks/usr/share/pam-configs/aurora-sep-fde
+
+# aurora-sep-initrd-check.service is wanted by multi-user.target through the
+# link upstream installs in /usr/lib, as on alarm-aurora; nothing more to enable.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf luks/test debian/test-seal.log

@@ -1,0 +1,6 @@
+Name: Change the Secure Enclave disk password with the login password
+Default: yes
+Priority: 64
+Password-Type: Additional
+Password:
+	optional	pam_aurora_sep_fde.so

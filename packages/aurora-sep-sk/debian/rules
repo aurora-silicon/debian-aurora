@@ -1,0 +1,22 @@
+#!/usr/bin/make -f
+include /usr/share/dpkg/architecture.mk
+include /usr/share/dpkg/buildtools.mk
+
+%:
+	dh $@ --sourcedirectory=sk --with installsysusers
+
+override_dh_auto_build:
+	dh_auto_build -- PKG_CONFIG=$(PKG_CONFIG)
+
+# The OpenSSH flow against software P-256 stand-ins: no root, no hardware.
+override_dh_auto_test:
+	dh_auto_test -- PKG_CONFIG=$(PKG_CONFIG)
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/aurora-sep-sk -- PKG_CONFIG=$(PKG_CONFIG) PREFIX=/usr \
+		LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH) UDEVRULESDIR=/usr/lib/udev/rules.d \
+		SYSUSERSDIR=/usr/lib/sysusers.d
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf sk/test

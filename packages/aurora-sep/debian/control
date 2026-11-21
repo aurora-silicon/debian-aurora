@@ -1,0 +1,35 @@
+Source: aurora-sep
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/linux
+Rules-Requires-Root: no
+
+Package: aurora-sep
+Architecture: all
+Depends: aurora-touchid-rearm,
+ aurora-xart,
+ fprintd-aurora (>= 1.94.5-4+aurora1),
+ keyutils,
+ kmod,
+ libfprint-aurora (>= 1:1.94.100-1+aurora1),
+ libpam-fprintd (>= 1.94.5-4+aurora1),
+ python3,
+ systemd,
+ ${misc:Depends}
+Suggests: libglib2.0-bin
+Description: SEP trusted-key and Touch ID integration for Aurora
+ Loads the apple_sep Secure Enclave driver after persistent storage is
+ mounted and verifies trusted key sealing and unsealing. On machines with a
+ fingerprint reader it also sets up the per-device calibration, activates
+ Touch ID before fprintd starts and lets fprintd use the Aurora libfprint
+ driver. Touch ID is reported ready only when the sensor attached, the
+ fingerprints were restored and a match can save its state. Initialization
+ runs in the background without holding up the desktop.
+ .
+ A fingerprint or the password unlocks the lock screen and answers sudo and
+ polkit; the login screen, the console login, su and ssh ask for the
+ password. A short press of the power button, which is the Touch ID sensor,
+ suspends.

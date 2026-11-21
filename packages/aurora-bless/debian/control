@@ -1,0 +1,53 @@
+Source: aurora-bless
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), cargo:native, rustc:native, libstd-rust-dev, pkgconf,
+ libdbus-1-dev, ca-certificates
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-bless
+Rules-Requires-Root: no
+
+Package: aurora-bless
+Architecture: arm64
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Provides: asahi-bless (= ${binary:Version})
+Conflicts: asahi-bless
+Replaces: asahi-bless
+Description: startup-volume selector for Apple silicon Macs (Aurora)
+ aurora-bless selects the volume an Apple silicon Mac starts from, like
+ macOS's Startup Disk, including the MacBook Neo's NVRAM. It replaces Debian's
+ asahi-bless and is also installed under that name.
+
+Package: aurora-nvram
+Architecture: arm64
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Provides: asahi-nvram (= ${binary:Version})
+Conflicts: asahi-nvram
+Replaces: asahi-nvram
+Description: read and write Apple silicon NVRAM variables (Aurora)
+ aurora-nvram reads and writes the NVRAM variables of Apple silicon Macs,
+ including the MacBook Neo's NVRAM. It replaces Debian's asahi-nvram and is
+ also installed under that name.
+
+Package: aurora-btsync
+Architecture: arm64
+Depends: bluez, dbus, systemd, ${misc:Depends}, ${shlibs:Depends}
+Provides: asahi-btsync (= ${binary:Version})
+Conflicts: asahi-btsync
+Replaces: asahi-btsync
+Description: use the Bluetooth pairings made in macOS on Linux (Aurora)
+ aurora-btsync copies the Bluetooth pairing keys that macOS keeps in NVRAM
+ into BlueZ's storage, so devices paired in macOS work on Linux. A udev rule
+ runs it when the NVRAM device appears, before bluetoothd starts. It replaces
+ Debian's asahi-btsync and is also installed under that name.
+
+Package: aurora-panel-nits
+Architecture: arm64
+Depends: systemd, ${misc:Depends}, ${shlibs:Depends}
+Description: panel brightness shared with the boot loader through NVRAM
+ aurora-panel-nits keeps one brightness level for the built-in panel of Apple
+ silicon Macs, shared by the boot loader, Linux and macOS through the NVRAM
+ variable backlight-nits. Its service starts once the panel's backlight and
+ the NVRAM device exist, and takes over systemd-backlight's restore for the
+ built-in panel.
