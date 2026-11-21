@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+PKG := debian/aurora-archive-keyring
+KEYS := $(wildcard keys/*.asc)
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	@test -n "$(KEYS)" || { echo 'no archive key in keys/ (see keys/README.md)' >&2; exit 1; }
+	cat $(KEYS) | gpg --dearmor > aurora-archive-keyring.gpg
+
+override_dh_auto_install:
+	install -Dm644 aurora-archive-keyring.gpg $(PKG)/usr/share/keyrings/aurora-archive-keyring.gpg
+	install -Dm644 aurora.pref $(PKG)/etc/apt/preferences.d/aurora.pref
+
+override_dh_clean:
+	dh_clean aurora-archive-keyring.gpg

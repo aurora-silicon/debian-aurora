@@ -1,0 +1,12 @@
+Explanation: Aurora's builds of hardware and desktop packages replace Debian's
+Explanation: packages of the same name, even when Debian has a newer version;
+Explanation: Aurora rebases its builds onto Debian's updates.
+Package: *
+Pin: release o=Aurora Silicon
+Pin-Priority: 990
+
+Explanation: Debian's own Asahi speaker stack never replaces Aurora's: its
+Explanation: profiles and daemon do not carry Aurora's protection.
+Package: asahi-audio alsa-ucm-conf-asahi speakersafetyd
+Pin: release o=Debian
+Pin-Priority: -1

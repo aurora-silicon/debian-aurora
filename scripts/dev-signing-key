@@ -1,0 +1,18 @@
+#!/bin/bash
+# Create (once) a local, passphrase-less development key for signing a local
+# package repository, and put its public half where aurora-archive-keyring
+# picks it up. Images built with it are for local testing only: the key is
+# not committed, and publication refuses a keyring that contains it.
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+export GNUPGHOME=$root/cache/dev-signing/gnupg
+public=$root/packages/aurora-archive-keyring/keys/development.asc
+if [[ ! -d $GNUPGHOME ]]; then
+  mkdir -p "$GNUPGHOME"
+  chmod 700 "$GNUPGHOME"
+  gpg --batch --quiet --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key 'Aurora Debian development key (local builds only)' ed25519 sign never
+fi
+fingerprint=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+gpg --batch --armor --export "$fingerprint" > "$public"
+echo "$fingerprint"

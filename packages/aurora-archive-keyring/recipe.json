@@ -1,0 +1,8 @@
+{
+  "source": "aurora-archive-keyring",
+  "version": "2026.11.1",
+  "kind": "native",
+  "changes": "Aurora Debian's archive signing key and the apt pin that lets Aurora's builds replace Debian's packages of the same name.",
+  "alarm": ["aurora-keyring"],
+  "notes": "keys/aurora-debian-archive.asc is the owner's production public key (keys/README.md). A local development build adds keys/development.asc from scripts/dev-signing-key; it is never committed, and publication refuses a keyring that contains it."
+}

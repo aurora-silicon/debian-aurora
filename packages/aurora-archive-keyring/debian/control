@@ -1,0 +1,17 @@
+Source: aurora-archive-keyring
+Section: misc
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), gpg
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/debian-aurora
+Rules-Requires-Root: no
+
+Package: aurora-archive-keyring
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: Aurora Debian archive key and package pin
+ The public key that signs Aurora Debian's package repository, and an apt
+ preference (priority 990) that keeps Aurora's builds of Debian packages
+ installed in place of Debian's own.
