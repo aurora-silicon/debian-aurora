@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+version=@RELEASE@
+image=/boot/vmlinuz-$version
+
+case "$1" in
+    remove|purge)
+        if [ -d /etc/kernel/postrm.d ]; then
+            DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg="$version" --arg="$image" \
+                /etc/kernel/postrm.d
+        fi
+        if [ "$1" = purge ]; then
+            # depmod's generated indexes belong to no package.
+            rm -f /usr/lib/modules/"$version"/modules.*
+            rmdir --ignore-fail-on-non-empty /usr/lib/modules/"$version" 2>/dev/null || true
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

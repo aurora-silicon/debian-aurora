@@ -1,0 +1,6 @@
+# systemd enables every unit no preset names. Arch Linux and Fedora ship
+# this rule as 99-default.preset; Debian does not, because its maintainer
+# scripts enable units at installation. An Aurora image's first boot applies
+# presets in enable-only mode, so without it that boot would enable every
+# installed unit nobody chose.
+disable *

@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+PKG := debian/aurora-boot
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	install -Dm644 dracut/90-aurora.conf $(PKG)/usr/lib/dracut/dracut.conf.d/90-aurora.conf
+	install -Dm755 dracut/91aurora-usb4/module-setup.sh $(PKG)/usr/lib/dracut/modules.d/91aurora-usb4/module-setup.sh
+	install -Dm755 dracut/91aurora-display/module-setup.sh $(PKG)/usr/lib/dracut/modules.d/91aurora-display/module-setup.sh
+	install -Dm755 -t $(PKG)/usr/lib/dracut/modules.d/91aurora-early-kms dracut/91aurora-early-kms/module-setup.sh \
+	  dracut/91aurora-early-kms/aurora-early-kms.sh dracut/91aurora-early-kms/aurora-early-kms-wait.sh
+	# Debian's GRUB reads /etc/default/grub.d after /etc/default/grub.
+	install -Dm644 -t $(PKG)/etc/default/grub.d grub/40-aurora-console.cfg grub/45-aurora-mte.cfg
+	install -Dm644 -t $(PKG)/usr/lib/systemd/system-preset preset/80-aurora-image.preset \
+	  preset/85-aurora-enable.preset preset/99-aurora-default.preset
+	install -Dm644 preset/user/85-aurora-enable.preset $(PKG)/usr/lib/systemd/user-preset/85-aurora-enable.preset

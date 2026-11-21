@@ -1,0 +1,12 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Debian kernel hook (installed in /etc/kernel/postinst.d and postrm.d): after
+# a kernel is installed or removed, refresh Stage 2 from the installed kernels.
+# Removing a kernel that needs an older DT ABI generation lets the newest
+# kernel's trees through, as Fedora's kernel-install remove does.
+#
+# A refusal keeps the last complete Stage 2 and says why; like alarm-aurora's
+# pacman hook, it does not fail the package transaction.
+[ "$(uname -m)" = aarch64 ] || exit 0
+/usr/bin/update-m1n1 || echo "update-m1n1 did not update Stage 2; the previous Stage 2 is kept" >&2
+exit 0

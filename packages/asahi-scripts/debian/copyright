@@ -1,0 +1,11 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: asahi-scripts
+Source: https://github.com/asahi-alarm/asahi-scripts
+
+Files: *
+Copyright: The Asahi Linux contributors
+License: MIT
+
+Files: debian/*
+Copyright: Aurora Silicon, fedora-aurora and alarm-aurora contributors
+License: MIT

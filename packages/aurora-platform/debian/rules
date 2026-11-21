@@ -1,0 +1,27 @@
+#!/usr/bin/make -f
+INSTALL = $(MAKE) DESTDIR=$(CURDIR)/debian/$(1) PREFIX=/usr SYSCONFDIR=/etc LOCALSTATEDIR=/var
+
+%:
+	dh $@
+
+override_dh_auto_build override_dh_auto_test:
+
+override_dh_auto_install:
+	$(call INSTALL,aurora-firstboot) install-common install-dracut
+	$(call INSTALL,aurora-power-budget) install-power
+	$(call INSTALL,aurora-gamemode) install-gamemode
+	$(call INSTALL,aurora-secboot) install-secboot
+	# Debian's kernel packages run /etc/kernel hooks, not kernel-install
+	# plugins; these call the same aurora-secboot hook after dracut.
+	install -Dm755 debian/zz-aurora-secboot debian/aurora-secboot/etc/kernel/postinst.d/zz-aurora-secboot
+	install -Dm755 debian/zz-aurora-secboot debian/aurora-secboot/etc/kernel/postrm.d/zz-aurora-secboot
+	install -Dm644 debian/90-aurora-firstboot.preset debian/aurora-firstboot/usr/lib/systemd/system-preset/90-aurora-firstboot.preset
+	install -Dm644 debian/90-aurora-power-budget.preset debian/aurora-power-budget/usr/lib/systemd/system-preset/90-aurora-power-budget.preset
+	install -Dm644 debian/90-aurora-secboot.preset debian/aurora-secboot/usr/lib/systemd/system-preset/90-aurora-secboot.preset
+
+# Units are enabled exactly where alarm-aurora's presets enable them; a
+# package installation starts none of them.
+override_dh_installsystemd:
+	dh_installsystemd -paurora-firstboot --no-start aurora-firstboot.service aurora-initrd-keymap.path
+	dh_installsystemd -paurora-power-budget --no-start aurora-power-budget.service
+	dh_installsystemd -paurora-secboot --no-start aurora-secboot-adopt.service

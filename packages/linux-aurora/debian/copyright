@@ -1,0 +1,14 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: linux
+Source: https://github.com/aurora-silicon/linux
+
+Files: *
+Copyright: Linus Torvalds and many others; Asahi Linux contributors; Aurora Silicon
+License: GPL-2.0-only
+ The Linux kernel is distributed under the GNU General Public License version
+ 2 only, with the syscall note; see COPYING and LICENSES/ in the source. On
+ Debian systems the full text is in /usr/share/common-licenses/GPL-2.
+
+Files: debian/*
+Copyright: Aurora Silicon; alarm-aurora contributors (asahi-alarm linux-asahi by Jos Dehaes and Matthias Kurz)
+License: GPL-2.0-only

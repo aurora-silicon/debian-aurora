@@ -1,0 +1,68 @@
+#!/usr/bin/make -f
+# The build mirrors alarm-aurora's aura recipe: three builds of the pinned
+# source with the pinned Rust toolchain.
+include /usr/share/dpkg/pkg-info.mk
+
+COMMIT := $(shell sed -n 's/^commit=//p' debian/aurora-pin)
+JOBS := $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+RUST := 1.99.0
+export RUSTUP_HOME := $(CURDIR)/debian/.rustup
+export CARGO_HOME := $(CURDIR)/debian/.cargo
+export PATH := $(CARGO_HOME)/bin:$(PATH)
+export RUSTUP_TOOLCHAIN := $(RUST)
+AURA_MAKE = $(MAKE) -j$(or $(JOBS),1) RELEASE=1 CHAINLOADING=1 USE_CLANG=1 BUILTIN_LOGO=aurora
+STAGE1 := debian/stage1
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	rustup toolchain install $(RUST) --profile minimal --target aarch64-unknown-none-softfloat
+	# A monitor-free aura moves the kernel into the CTXR window, so it needs a
+	# kernel built with CONFIG_ARM64_CTXR_EXECMEM (aurora-ctxr-execmem).
+	if [ -f src/ctxr_exec.c ] || [ ! -f src/monitor.c ]; then touch debian/monitor-free; fi
+	# A package build never asserts hardware qualification.
+	python3 debian/validate-qualification.py --build-only debian/build-qualification.json $(COMMIT)
+
+override_dh_auto_build:
+	# The pin is not a release tag: label it <VERSION>-g<commit>.
+	set -e; export AURA_VERSION_TAG="$$(cat VERSION)-g$$(echo $(COMMIT) | cut -c1-8)"; \
+	$(MAKE) clean; \
+	$(AURA_MAKE); \
+	install -Dm644 build/aura.bin $(STAGE1)/aura-raw.bin; \
+	install -Dm644 build/aura.macho $(STAGE1)/aura.macho; \
+	install -Dm644 build/aura-boot.macho $(STAGE1)/aura-boot.macho; \
+	$(MAKE) clean; \
+	python3 debian/nobody-key.py > $(STAGE1)/nobody.pub; \
+	$(AURA_MAKE) SECBOOT=audit SECBOOT_FLAVOUR=secure SECBOOT_PUBKEY=$(CURDIR)/$(STAGE1)/nobody.pub; \
+	install -Dm644 build/aura.bin $(STAGE1)/aura-secure-raw.bin; \
+	$(MAKE) clean; \
+	$(AURA_MAKE) ESP_STAGE2=1
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -Dm644 build/aura.bin debian/aura/usr/lib/asahi-boot/m1n1.bin
+	install -d debian/aura/usr/lib/m1n1-neo
+	ln -s ../asahi-boot/m1n1.bin debian/aura/usr/lib/m1n1-neo/m1n1.bin
+	# Without the monitor, update-m1n1 stops writing boot.bin on Mach-O Macs.
+	if [ -f debian/monitor-free ]; then install -Dm644 /dev/null debian/aura/usr/share/aura/monitor-free; fi
+	for file in aura-raw.bin aura-boot.macho aura.macho aura-secure-raw.bin; do \
+	  install -Dm644 $(STAGE1)/$$file debian/aura/usr/share/aura/stage1/$$file || exit 1; \
+	done
+	for tool in fill_stage1_config.py secboot_sign.py macho_boot_object.py; do \
+	  install -Dm644 tools/$$tool debian/aura/usr/share/aura/tools/$$tool || exit 1; \
+	done
+	install -Dm644 tools/recovery/enroll-stage1.sh debian/aura/usr/share/aura/tools/enroll-stage1.sh
+	install -Dm644 debian/build-qualification.json debian/aura/usr/share/doc/aura/build-qualification.json
+
+# dh_prep clears substvars written earlier, so the dependency is set here.
+override_dh_gencontrol:
+	dh_gencontrol -- $(if $(wildcard debian/monitor-free),-Vaura:CtxrKernel=aurora-ctxr-execmem)
+
+# The boot objects are not ELF programs for this system.
+override_dh_strip override_dh_dwz override_dh_shlibdeps:
+
+override_dh_clean:
+	dh_clean debian/monitor-free
+	rm -rf debian/.rustup debian/.cargo debian/stage1

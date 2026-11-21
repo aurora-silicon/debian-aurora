@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    triggered)
+        # aura or U-Boot changed: compose a new Stage 2 and arm its trial.
+        if [ "$(uname -m)" = aarch64 ]; then
+            update-m1n1 || echo "update-m1n1 did not update Stage 2; the previous Stage 2 is kept" >&2
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

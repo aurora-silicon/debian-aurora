@@ -1,0 +1,2 @@
+# The camera filter is on for every user (alarm-aurora's user preset).
+enable aurora-camera-denoise.service

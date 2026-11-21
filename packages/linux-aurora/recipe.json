@@ -1,0 +1,10 @@
+{
+  "source": "linux-aurora",
+  "version": "7.3.0-1",
+  "kind": "upstream",
+  "upstream": {"pin": "kernel-aurora"},
+  "network": true,
+  "changes": "Aurora's shared kernel for Apple Silicon, configured and built as alarm-aurora builds it (one universal configuration plus the source-pinned asahi.config), packaged with Debian's kernel conventions.",
+  "alarm": ["linux-aurora", "linux-aurora-headers", "aurora-userpages"],
+  "notes": "The build installs the pinned Rust 1.99.0 toolchain with rustup and builds the kernel's private bindgen from crates.io, as alarm-aurora does. Headers carry host tools and are built only natively (build profile !cross)."
+}

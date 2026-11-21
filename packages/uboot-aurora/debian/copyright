@@ -1,0 +1,9 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: u-boot
+Source: https://github.com/aurora-silicon/u-boot
+
+Files: *
+Copyright: Wolfgang Denk and the U-Boot contributors; Asahi Linux contributors; Aurora Silicon
+License: GPL-2.0-or-later
+ See Licenses/ in the source. On Debian systems the full text of the GPL
+ version 2 is in /usr/share/common-licenses/GPL-2.

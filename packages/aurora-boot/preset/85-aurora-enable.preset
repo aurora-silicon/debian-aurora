@@ -1,0 +1,8 @@
+# Units Aurora's packages enable when they are installed (as alarm-aurora's
+# install scripts apply each package's preset). Recorded here so a full
+# preset run keeps them: 99-aurora-default.preset disables everything else.
+enable aurora-sep.timer
+enable aurora-touchid-rearm.socket
+enable aurora-touchid-boot.service
+enable aurora-kbd-light.service
+enable aurora-wifi-firmware.service

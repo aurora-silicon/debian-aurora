@@ -1,0 +1,23 @@
+Source: aura
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), clang:native, lld:native, llvm:native, python3:native,
+ rustup:native, ca-certificates
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aura
+Rules-Requires-Root: no
+
+Package: aura
+Architecture: arm64
+Depends: asahi-scripts (>= 20260127.1), aurora-stage2-ctxr-slot, aurora-stage2-trial, uboot-aurora,
+ ${aura:CtxrKernel}, ${misc:Depends}
+Provides: m1n1 (= 1.6.1.aurora19)
+Conflicts: m1n1
+Description: Aurora Silicon boot loader for Apple Silicon Macs
+ aura is Aurora's boot loader, based on m1n1. This package carries the Stage 2
+ object that update-m1n1 combines with U-Boot and the kernel's device trees,
+ and the Stage 1 images the macOS installer enrolls.
+ .
+ Ordinary package updates refresh Stage 2 on the EFI system partition through
+ update-m1n1's trial boot. They never enroll Stage 1.

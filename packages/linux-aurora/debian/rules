@@ -1,0 +1,109 @@
+#!/usr/bin/make -f
+# Mirrors alarm-aurora's linux-aurora PKGBUILD: the committed full
+# configuration plus the source-pinned asahi.config, LLVM 23 and the pinned
+# Rust toolchain with the kernel's private bindgen. Packaged the Debian way:
+# versioned image and headers packages, /boot/vmlinuz-<release>, and
+# /etc/kernel/postinst.d hooks (dracut, update-grub, update-m1n1).
+include /usr/share/dpkg/architecture.mk
+include /usr/share/dpkg/pkg-info.mk
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/buildflags.mk
+
+# Bump with every kernel pin; debian/control names the same release.
+ABINUM := 1
+RELEASE := $(DEB_VERSION_UPSTREAM)-$(ABINUM)-aurora
+IMAGE := debian/linux-image-$(RELEASE)
+HEADERS := debian/linux-headers-$(RELEASE)
+USERPAGES := debian/aurora-userpages
+O := $(CURDIR)/debian/build
+JOBS := $(or $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS))),1)
+RUST := 1.99.0
+
+export ARCH := arm64
+export KBUILD_BUILD_HOST := debian
+export KBUILD_BUILD_USER := linux-aurora
+export KBUILD_BUILD_TIMESTAMP := $(shell date -Ru -d @$(SOURCE_DATE_EPOCH))
+export RUSTUP_HOME := $(CURDIR)/debian/.rustup
+export CARGO_HOME := $(CURDIR)/debian/.cargo
+# LLVM 23's unversioned tools (clang, ld.lld), which the private bindgen's tests call.
+export PATH := $(CARGO_HOME)/bin:/usr/lib/llvm-23/bin:$(PATH)
+export RUSTUP_TOOLCHAIN := $(RUST)
+export LIBCLANG_PATH := /usr/lib/llvm-23/lib
+export AURORA_BINDGEN_REAL := $(CURDIR)/debian/private-bindgen/bin/bindgen
+# Kbuild assigns BINDGEN itself, so it is passed on every make command line.
+# The kernel's own build flags only: debhelper's exported CFLAGS/LDFLAGS are
+# for the target and would reach the build machine's host tools.
+KMAKE = env -u CFLAGS -u CPPFLAGS -u CXXFLAGS -u LDFLAGS $(MAKE) -j$(JOBS) LLVM=-23 O=$(O) LOCALVERSION= \
+	BINDGEN=$(CURDIR)/debian/bindgen-kernel.py \
+	RUSTFMT="$$(rustup which --toolchain $(RUST) rustfmt)"
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	grep -qx 'Package: linux-image-$(RELEASE)' debian/control
+	rustup toolchain install $(RUST) --profile minimal --component rustfmt --component rust-src
+	RUSTFMT="$$(rustup which --toolchain $(RUST) rustfmt)" \
+	  python3 tools/aurora-bindgen/build.py --output-dir debian/private-bindgen
+	mkdir -p $(O)
+	cp debian/config $(O)/.config
+	scripts/kconfig/merge_config.sh -m -O $(O) $(O)/.config arch/arm64/configs/asahi.config
+	scripts/config --file $(O)/.config --set-str LOCALVERSION -$(ABINUM)-aurora --disable LOCALVERSION_AUTO
+	$(KMAKE) olddefconfig
+	python3 debian/validate-config.py arch/arm64/configs/asahi.config $(O)/.config
+	# The monitor-free aura moves the kernel into the CTXR window.
+	grep -qx 'CONFIG_ARM64_CTXR_EXECMEM=y' $(O)/.config
+	grep -qx 'CONFIG_RUST=y' $(O)/.config
+	# Desktop images need LUKS root unlock, Bluetooth, a firewall, removable
+	# exFAT media and generic HID input.
+	for option in DM_CRYPT DM_INTEGRITY BT NF_TABLES EXFAT_FS HID_GENERIC; do \
+	  grep -Eqx "CONFIG_$${option}=[ym]" $(O)/.config || { echo "linux-aurora requires CONFIG_$$option" >&2; exit 1; }; \
+	done
+	$(KMAKE) prepare
+	test "$$($(KMAKE) -s kernelrelease)" = "$(RELEASE)"
+
+override_dh_auto_build:
+	$(KMAKE) Image modules dtbs
+	# The launcher includes this tree's prctl.h, so its numbers match the kernel.
+	$(MAKE) -C tools/aurora-userpages CC=$(DEB_HOST_GNU_TYPE)-gcc CFLAGS="$(CFLAGS)" CPPFLAGS="$(CPPFLAGS)" \
+	  LDFLAGS="$(LDFLAGS) -Wl,-z,max-page-size=65536"
+
+override_dh_auto_test:
+
+# The build is out of tree (debian/build). The kernel's own distclean would
+# delete debian/, which its packaging scripts claim.
+override_dh_auto_clean:
+
+override_dh_auto_install:
+	install -Dm644 $(O)/arch/arm64/boot/Image $(IMAGE)/boot/vmlinuz-$(RELEASE)
+	install -Dm644 $(O)/.config $(IMAGE)/boot/config-$(RELEASE)
+	install -Dm644 $(O)/System.map $(IMAGE)/boot/System.map-$(RELEASE)
+	$(KMAKE) INSTALL_MOD_PATH=$(CURDIR)/$(IMAGE)/usr INSTALL_MOD_STRIP=1 modules_install
+	install -Dm644 -t $(IMAGE)/usr/lib/modules/$(RELEASE)/dtb/apple $(O)/arch/arm64/boot/dts/apple/*.dtb
+	install -Dm644 debian/dtb-abi $(IMAGE)/usr/lib/modules/$(RELEASE)/dtb-abi
+	rm -f $(IMAGE)/usr/lib/modules/$(RELEASE)/build $(IMAGE)/usr/lib/modules/$(RELEASE)/source
+	install -Dm755 tools/aurora-userpages/userpages $(USERPAGES)/usr/bin/userpages
+	install -Dm644 tools/aurora-userpages/README.rst $(USERPAGES)/usr/share/doc/aurora-userpages/README.rst
+	install -Dm644 debian/50-aurora-user4k.cfg $(USERPAGES)/etc/default/grub.d/50-aurora-user4k.cfg
+	for script in preinst postinst prerm postrm; do \
+	  sed 's/@RELEASE@/$(RELEASE)/g' debian/linux-image.$$script.in > debian/linux-image-$(RELEASE).$$script || exit 1; \
+	done
+ifeq (,$(filter cross,$(DEB_BUILD_PROFILES)))
+	debian/install-headers $(O) $(CURDIR)/$(HEADERS)/usr/src/linux-headers-$(RELEASE) "$(KMAKE)"
+	install -d $(HEADERS)/usr/lib/modules/$(RELEASE)
+	ln -s /usr/src/linux-headers-$(RELEASE) $(HEADERS)/usr/lib/modules/$(RELEASE)/build
+endif
+
+# Modules are signed at build time: stripping them again would break the
+# signatures. The headers' host tools are stripped by install-headers.
+override_dh_strip:
+	dh_strip -paurora-userpages
+
+override_dh_dwz:
+	dh_dwz -paurora-userpages
+
+override_dh_clean:
+	dh_clean debian/linux-image-*.preinst debian/linux-image-*.postinst \
+	  debian/linux-image-*.prerm debian/linux-image-*.postrm
+	rm -rf debian/build debian/private-bindgen debian/.rustup debian/.cargo
+	$(MAKE) -C tools/aurora-userpages clean

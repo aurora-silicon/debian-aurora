@@ -1,0 +1,17 @@
+Source: aurora-firmware
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/debian-aurora
+Rules-Requires-Root: no
+
+Package: aurora-firmware
+Architecture: all
+Depends: asahi-scripts, dracut, kmod, wireless-regdb, cpio, util-linux, ${misc:Depends}
+Description: Admit Apple Silicon peripherals after their firmware is extracted
+ Peripherals that need the Mac's own firmware (the always-on processor, the
+ MT7932 Wi-Fi and Bluetooth, DockChannel keyboards) are kept from loading
+ until the initrd has extracted that firmware from the EFI system partition;
+ a dracut module and a boot service then load them explicitly.

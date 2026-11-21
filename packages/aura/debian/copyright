@@ -1,0 +1,9 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: aura
+Source: https://github.com/aurora-silicon/aura
+
+Files: *
+Copyright: The Asahi Linux contributors, Aurora Silicon
+License: MIT and GPL-2.0-only
+ aura is based on m1n1 (MIT); Aurora's additions are GPL-2.0-only. LICENSE
+ and 3rdparty_licenses/ in the source carry the full texts.

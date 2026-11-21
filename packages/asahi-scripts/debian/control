@@ -1,0 +1,19 @@
+Source: asahi-scripts
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), python3:native <!nocheck>, device-tree-compiler <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/asahi-alarm/asahi-scripts
+Rules-Requires-Root: no
+
+Package: asahi-scripts
+Architecture: all
+Depends: bash, python3, device-tree-compiler, gzip, util-linux, ${misc:Depends}
+Provides: aurora-stage2-ctxr-slot (= 1), aurora-stage2-trial (= 1)
+Description: Apple Silicon maintenance scripts with Aurora's Stage 2 updater
+ asahi-alarm's maintenance scripts and dracut modules (vendor firmware in the
+ initrd), with Aurora's update-m1n1: a kernel, aura or U-Boot update composes a
+ new Stage 2, arms aura's one-shot trial and keeps the live image until
+ aurora-stage2-commit.service accepts the trial boot. A guard timer returns an
+ uncommitted trial to the configured Stage 2.

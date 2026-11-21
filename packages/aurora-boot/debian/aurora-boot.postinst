@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+# Apply the GRUB settings on an installed system; an image build has no
+# grub.cfg yet and runs update-grub itself.
+if [ "$1" = configure ] && [ -f /boot/grub/grub.cfg ] && command -v update-grub >/dev/null 2>&1; then
+    update-grub
+fi
+
+#DEBHELPER#
+
+exit 0

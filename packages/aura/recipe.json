@@ -1,0 +1,10 @@
+{
+  "source": "aura",
+  "version": "1.0.0~b14.1-1",
+  "kind": "upstream",
+  "upstream": {"pin": "aura"},
+  "network": true,
+  "changes": "Aurora's boot loader for Apple Silicon: Stage 1 (raw and Mach-O, plus the owner-key flavour) and the ESP Stage 2 object, built as alarm-aurora builds them. Package updates never enroll Stage 1.",
+  "alarm": ["aura"],
+  "notes": "The build installs the pinned Rust 1.99.0 toolchain with rustup, as alarm-aurora does."
+}

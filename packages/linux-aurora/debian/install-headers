@@ -1,0 +1,65 @@
+#!/bin/bash
+# Install what out-of-tree module builds need, as alarm-aurora's
+# linux-aurora-headers package does (its _package-headers, step for step).
+#
+#   install-headers BUILD_DIR DESTINATION "KMAKE"
+#
+# Run from the kernel source tree, natively: the headers' host tools are
+# programs for the machine that builds modules.
+set -euo pipefail
+O=$1
+dest=$2
+kmake=$3
+karch=arm64
+
+echo "Installing build files..."
+install -Dt "$dest" -m644 "$O/.config" Makefile "$O/Module.symvers" "$O/System.map" "$O/vmlinux"
+eval "$kmake -s kernelrelease" > "$dest/version"
+install -Dt "$dest/kernel" -m644 kernel/Makefile
+cp -t "$dest" -a scripts "$O/scripts"
+
+# Required when DEBUG_INFO_BTF_MODULES is enabled.
+if grep -qx 'CONFIG_DEBUG_INFO_BTF=y' "$O/.config"; then
+  [[ -x $O/tools/bpf/resolve_btfids/resolve_btfids ]] || {
+    echo 'BTF is enabled but resolve_btfids was not built' >&2; exit 1;
+  }
+  install -Dt "$dest/tools/bpf/resolve_btfids" "$O/tools/bpf/resolve_btfids/resolve_btfids"
+fi
+
+echo "Installing headers..."
+cp -t "$dest" -a include "$O/include"
+install -Dt "$dest/arch/$karch" -m644 "arch/$karch/Makefile"
+install -Dt "$dest/arch/$karch/kernel" -m644 "$O/arch/$karch/kernel/asm-offsets.s"
+cp -t "$dest/arch/$karch" -a "arch/$karch/include" "$O/arch/$karch/include"
+install -Dt "$dest/drivers/md" -m644 drivers/md/*.h
+install -Dt "$dest/net/mac80211" -m644 net/mac80211/*.h
+install -Dt "$dest/drivers/media/i2c" -m644 drivers/media/i2c/msp3400-driver.h
+install -Dt "$dest/drivers/media/usb/dvb-usb" -m644 drivers/media/usb/dvb-usb/*.h
+install -Dt "$dest/drivers/media/dvb-frontends" -m644 drivers/media/dvb-frontends/*.h
+install -Dt "$dest/drivers/media/tuners" -m644 drivers/media/tuners/*.h
+install -Dt "$dest/drivers/iio/common/hid-sensors" -m644 drivers/iio/common/hid-sensors/*.h
+
+echo "Installing Kconfig files..."
+find . -path ./debian -prune -o -name 'Kconfig*' -exec install -Dm644 {} "$dest/{}" \;
+
+echo "Removing unneeded architectures..."
+for arch in "$dest"/arch/*/; do
+  [[ $arch == */$karch/ ]] && continue
+  rm -r -- "$arch"
+done
+
+echo "Removing documentation, broken symlinks, objects and command files..."
+rm -rf -- "$dest/Documentation"
+find -L "$dest" -type l -delete
+find "$dest" -type f \( -name '*.o' -o -name '*.cmd' \) -delete
+
+echo "Stripping build tools..."
+while read -rd '' file; do
+  case "$(file --no-sandbox -bi "$file")" in
+    application/x-sharedlib\;*) strip --strip-unneeded "$file" ;;
+    application/x-archive\;*) strip --strip-debug "$file" ;;
+    application/x-executable\;*) strip --strip-all "$file" ;;
+    application/x-pie-executable\;*) strip --strip-unneeded "$file" ;;
+  esac
+done < <(find "$dest" -type f -perm -u+x ! -name vmlinux -print0)
+strip --strip-debug "$dest/vmlinux"

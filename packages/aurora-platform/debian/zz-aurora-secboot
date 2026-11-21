@@ -1,0 +1,14 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Debian kernel hook (postinst.d and postrm.d): build, and sign when the
+# owner's db key exists, the secure-path UKI of a kernel after dracut has made
+# its initrd, or remove it with the kernel; the same aurora-secboot hook as
+# the kernel-install plugin and mkinitcpio post hook on other distributions.
+# It does nothing until /etc/aurora/secboot.conf exists.
+version=$1
+image=${2:-/boot/vmlinuz-$version}
+[ -f /etc/aurora/secboot.conf ] && [ -n "$version" ] || exit 0
+case $0 in
+    */postrm.d/*) exec /usr/bin/aurora-secboot hook remove "$version" ;;
+esac
+exec /usr/bin/aurora-secboot hook add "$version" --image "$image" --initrd "/boot/initrd.img-$version"

@@ -1,0 +1,38 @@
+Source: aurora-platform
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/aurora-platform
+Rules-Requires-Root: no
+
+Package: aurora-firstboot
+Architecture: all
+Depends: bash, cryptsetup-bin (>= 2:2.8), btrfs-progs, util-linux, coreutils, systemd, python3, passwd,
+ sudo, kbd, procps, dracut, ${misc:Depends}
+Description: Aurora per-install root encryption and Linux owner setup
+ On an installed system's first boot, the initrd converts the root file system
+ to LUKS2 in place with a temporary key; the desktop's own setup (or a text
+ wizard) then creates the owner account, whose password replaces that key.
+
+Package: aurora-power-budget
+Architecture: all
+Depends: python3, systemd, power-profiles-daemon, ${misc:Depends}
+Description: CPU power budget for the power-saver profile on Apple Silicon
+ Limits the CPU power budget while the power-saver profile is active, from
+ values the machine reports.
+
+Package: aurora-gamemode
+Architecture: all
+Depends: gamemode, ${misc:Depends}
+Description: GameMode defaults for Apple Silicon
+ Runs games on the performance cores and keeps the schedutil governor.
+
+Package: aurora-secboot
+Architecture: all
+Depends: python3, systemd, systemd-ukify, sbsigntool, openssl, ${misc:Depends}
+Description: Signed unified kernel images for the Aurora secure boot path
+ Builds, and signs with the owner's key when one exists, a unified kernel image
+ for each installed kernel. It does nothing until /etc/aurora/secboot.conf
+ exists; see aurora-secboot(1).

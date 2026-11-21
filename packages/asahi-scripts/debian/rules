@@ -1,0 +1,32 @@
+#!/usr/bin/make -f
+PKG := debian/asahi-scripts
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	$(MAKE) PREFIX=/usr all
+
+override_dh_auto_install:
+	$(MAKE) PREFIX=/usr DESTDIR=$(CURDIR)/$(PKG) install install-dracut install-udev-hwdb
+	# Aurora's trial-then-commit updater replaces the tag's update-m1n1.
+	install -m755 debian/update-m1n1 $(PKG)/usr/bin/update-m1n1
+	install -Dm644 -t $(PKG)/usr/libexec/aurora debian/bootchain.py debian/bootchain_debian.py
+	install -Dm755 debian/aurora-stage2-commit $(PKG)/usr/libexec/aurora/aurora-stage2-commit
+	install -Dm644 -t $(PKG)/usr/lib/systemd/system debian/aurora-stage2-commit.service \
+	  debian/aurora-stage2-guard.service debian/aurora-stage2-guard.timer
+	install -Dm644 debian/90-aurora-stage2.preset $(PKG)/usr/lib/systemd/system-preset/90-aurora-stage2.preset
+	# aurora-secboot stage1 build --enforce looks for this marker.
+	install -Dm644 /dev/null $(PKG)/usr/share/aurora/stage2-sign-hook
+	install -Dm755 debian/zz-aurora-update-m1n1 $(PKG)/etc/kernel/postinst.d/zz-aurora-update-m1n1
+	install -Dm755 debian/zz-aurora-update-m1n1 $(PKG)/etc/kernel/postrm.d/zz-aurora-update-m1n1
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	cd debian && python3 -m unittest -q test_bootchain test_bootchain_debian
+endif
+
+# The preset enables the boot-time commit and its guard timer; neither is
+# started by a package installation.
+override_dh_installsystemd:
+	dh_installsystemd --no-start aurora-stage2-commit.service aurora-stage2-guard.timer

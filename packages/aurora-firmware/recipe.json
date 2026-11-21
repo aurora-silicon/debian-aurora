@@ -1,0 +1,8 @@
+{
+  "source": "aurora-firmware",
+  "version": "20261018.1",
+  "kind": "native",
+  "changes": "Admit the peripherals that need this Mac's own firmware (AOP, MT7932 Wi-Fi and Bluetooth, DockChannel HID) once the initrd has extracted it, with fedora-aurora's dracut module and alarm-aurora's admission script.",
+  "alarm": ["aurora-firmware"],
+  "notes": "Debian's initrd is dracut, so the initrd side is fedora-aurora's 98aurora-peripherals module after asahi-scripts' 99asahi-firmware extraction; alarm-aurora's mkinitcpio hook and load-vendor-firmware do the same for mkinitcpio. The admission script is alarm-aurora's newer one (it also re-probes the ASMedia USB controller of the Mac Studio and Mac mini)."
+}

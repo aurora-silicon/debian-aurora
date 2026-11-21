@@ -1,0 +1,57 @@
+Source: linux-aurora
+Section: kernel
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), bc, bison, flex, cpio, kmod,
+ xz-utils, zstd, rsync,
+ patch, perl:native, python3:native, openssl, libssl-dev:native, libelf-dev:native,
+ dwarves, pkgconf:native, clang-23:native, lld-23:native, llvm-23:native, libclang-23-dev:native,
+ rustup:native, ca-certificates, libc6-dev, file <!cross>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/linux
+Rules-Requires-Root: no
+
+Package: linux-image-7.3.0-1-aurora
+Architecture: arm64
+Depends: kmod, dracut, aura (>= 1.0.0~b12), aurora-audio, avd-fw, aurora-stage2-trial, aurora-userpages,
+ ${misc:Depends}
+Recommends: firmware-linux-free
+Provides: linux-image, wireguard-modules (= 1.0.0), aurora-ctxr-execmem
+Description: Linux 7.3.0 for Apple Silicon Macs (Aurora)
+ Aurora Silicon's shared kernel for Apple Silicon Macs: the image, modules and
+ the Apple device trees (in /usr/lib/modules/<release>/dtb, with their DT ABI
+ generation), which update-m1n1 composes into Stage 2.
+ .
+ It pairs with the pinned aura: an aura without the monitor needs this
+ kernel's CTXR execution window (aurora-ctxr-execmem).
+
+Package: linux-headers-7.3.0-1-aurora
+Architecture: arm64
+Build-Profiles: <!cross>
+Depends: pahole, ${shlibs:Depends}, ${misc:Depends}
+Description: Header files for Linux 7.3.0-1-aurora
+ Headers, configuration and build scripts for building out-of-tree modules
+ against the Aurora kernel 7.3.0-1-aurora.
+
+Package: linux-image-aurora
+Architecture: arm64
+Depends: linux-image-7.3.0-1-aurora, ${misc:Depends}
+Description: Aurora kernel for Apple Silicon Macs (latest)
+ This package depends on the current Aurora kernel image, so that upgrades
+ install new kernels alongside the running one.
+
+Package: linux-headers-aurora
+Architecture: arm64
+Build-Profiles: <!cross>
+Depends: linux-headers-7.3.0-1-aurora, ${misc:Depends}
+Description: Header files for the latest Aurora kernel
+ This package depends on the headers of the current Aurora kernel.
+
+Package: aurora-userpages
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Run programs with 4K userspace pages on the Aurora kernel
+ userpages 4k COMMAND runs a program, and the programs it starts, with 4K
+ pages on the 16K kernel, for software that assumes 4K pages. It needs
+ user4k=on on the kernel command line, which this package adds to GRUB's
+ configuration unless /etc/default/grub already sets user4k=.

@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_install:
+	install -Dm644 aurora-firmware-order.conf debian/aurora-firmware/usr/lib/modprobe.d/aurora-firmware-order.conf
+	install -Dm755 aurora-peripheral-firmware.sh debian/aurora-firmware/usr/libexec/aurora/peripheral-firmware
+	install -Dm755 -t debian/aurora-firmware/usr/lib/dracut/modules.d/98aurora-peripherals module-setup.sh admit-peripherals.sh
+	install -Dm644 aurora-peripherals.service debian/aurora-firmware/usr/lib/systemd/system/aurora-peripherals.service
+	install -Dm644 90-aurora-peripherals.preset debian/aurora-firmware/usr/lib/systemd/system-preset/90-aurora-peripherals.preset
+
+# The preset enables the service; a package installation does not start it.
+override_dh_installsystemd:
+	dh_installsystemd --no-start aurora-peripherals.service

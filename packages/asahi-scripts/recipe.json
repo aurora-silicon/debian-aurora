@@ -1,0 +1,9 @@
+{
+  "source": "asahi-scripts",
+  "version": "20261023-1",
+  "kind": "upstream",
+  "upstream": {"url": "https://github.com/asahi-alarm/asahi-scripts/archive/refs/tags/20261023.tar.gz",
+               "sha256": "64c7e8d50f7ad37d58a64d1f1bc7c8848d7507093f40172e6dbce75c72b26ce4"},
+  "changes": "asahi-alarm's scripts with Aurora's trial-then-commit Stage 2 updater (fedora-aurora's bootchain.py) given Debian's paths and kernel hooks.",
+  "alarm": ["asahi-scripts"]
+}

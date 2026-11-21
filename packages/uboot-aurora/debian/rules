@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+# As alarm-aurora's uboot-aurora recipe: apple_m1_defconfig, out of tree.
+include /usr/share/dpkg/architecture.mk
+
+JOBS := $(or $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS))),1)
+ifneq ($(DEB_BUILD_GNU_TYPE),$(DEB_HOST_GNU_TYPE))
+CROSS_COMPILE := $(DEB_HOST_GNU_TYPE)-
+endif
+# OpenSSL's headers keep stubs for the removed ENGINE API that the host image
+# tools still call, behind OPENSSL_ENGINE_STUBS. Patching the checkout
+# instead would mark the version -dirty.
+UMAKE = $(MAKE) O=build-aurora CROSS_COMPILE=$(CROSS_COMPILE) PYTHON3=/usr/bin/python3 \
+	HOSTCFLAGS=-DOPENSSL_ENGINE_STUBS
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	$(UMAKE) apple_m1_defconfig
+
+override_dh_auto_build:
+	$(UMAKE) -j$(JOBS)
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -Dm644 build-aurora/u-boot-nodtb.bin debian/uboot-aurora/usr/lib/asahi-boot/u-boot-nodtb.bin
+	install -d debian/uboot-aurora/usr/lib/asahi-boot-j700
+	ln -s ../asahi-boot/u-boot-nodtb.bin debian/uboot-aurora/usr/lib/asahi-boot-j700/u-boot-nodtb.bin
+
+# u-boot-nodtb.bin is a boot object, not a program for this system.
+override_dh_strip override_dh_dwz override_dh_shlibdeps:
+
+override_dh_clean:
+	dh_clean
+	rm -rf build-aurora

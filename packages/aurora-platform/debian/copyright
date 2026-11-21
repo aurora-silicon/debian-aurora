@@ -1,0 +1,11 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: aurora-platform
+Source: https://github.com/aurora-silicon/aurora-platform
+
+Files: *
+Copyright: Aurora Silicon
+License: MIT
+
+Files: vendor/omarchy-mac-encrypt
+Copyright: See vendor/provenance.json in the source
+License: MIT

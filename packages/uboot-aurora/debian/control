@@ -1,0 +1,18 @@
+Source: uboot-aurora
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), bc, bison, flex, device-tree-compiler,
+ python3:native, python3-pyelftools, python3-setuptools, swig, libssl-dev:native,
+ libgnutls28-dev:native, uuid-dev:native
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/u-boot
+Rules-Requires-Root: no
+
+Package: uboot-aurora
+Architecture: arm64
+Depends: aurora-stage2-trial, ${misc:Depends}
+Description: U-Boot for Apple Silicon Macs (Aurora)
+ Aurora Silicon's common Apple Silicon U-Boot, including the MacBook Neo MTP
+ handoff. update-m1n1 combines it with aura and the kernel's device trees into
+ Stage 2; a new U-Boot reaches Stage 2 through aura's trial boot.

@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+version=@RELEASE@
+image=/boot/vmlinuz-$version
+
+if [ "$1" = configure ]; then
+    depmod -a -F "/boot/System.map-$version" "$version"
+    # dracut builds the initrd, update-grub adds the entry and update-m1n1
+    # composes the new Stage 2 trial (asahi-scripts' hook).
+    if [ -d /etc/kernel/postinst.d ]; then
+        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg="$version" --arg="$image" \
+            /etc/kernel/postinst.d
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0
