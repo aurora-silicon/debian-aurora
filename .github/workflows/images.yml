@@ -1,0 +1,81 @@
+name: Debian Aurora images
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        type: choice
+        options: [debian-minimal, debian-kde, debian-gnome]
+        default: debian-minimal
+      release-tag:
+        description: Immutable signed Debian Aurora package snapshot (testing-YYYYMMDD.N)
+        required: true
+      channel:
+        description: Update channel the installed system follows
+        type: choice
+        options: [testing, stable, edge]
+        default: testing
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  image:
+    runs-on: ubuntu-24.04-arm
+    # The Debian base and the desktop come from snapshot.debian.org.
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      # The image installs from this snapshot; apt checks its signature with
+      # the key aurora-archive-keyring pins (AURORA_ARCHIVE_KEY's default).
+      - name: Fetch the signed package snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          set -euo pipefail
+          [[ $RELEASE_TAG =~ ^testing-[0-9]{8}\.[0-9]+$ ]]
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/snapshot" \
+            --pattern debian-aurora-repository.tar
+          mkdir -p out/repository
+          tar -C out/repository --no-same-owner -xf "$RUNNER_TEMP/snapshot/debian-aurora-repository.tar"
+          test -s out/repository/dists/aurora/InRelease
+      # The finalizer is the aurora-platform pin in sources.json
+      # (aurora-firstboot); it seals debian-* profiles only once that pin
+      # includes aurora-platform's Debian support.
+      - name: Build and seal the distribution image
+        env:
+          PROFILE: ${{ inputs.profile }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          docker run --rm --privileged --ipc=host -v /dev:/dev -v /run/udev:/run/udev:ro -v "$PWD:/src" -w /src \
+            debian:testing bash -euo pipefail -c '
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends btrfs-progs \
+                ca-certificates curl debian-archive-keyring dosfstools e2fsprogs fdisk gnupg mmdebstrap mount \
+                python3 udev util-linux zstd >/dev/null
+              bash scripts/build-image "$1" out/repository "$2"
+            ' image "$PROFILE" "$CHANNEL" 2>&1 | tee image-build.log
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/*-filesystems.tar.zst
+      # aurora-distributions' build-payload.yml downloads this artifact by
+      # name and reads out/<profile>-filesystems.tar.zst{,.sha256}; the log at
+      # the top level keeps the out/ prefix in the artifact.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: ${{ inputs.profile }}-candidate
+          compression-level: 0
+          path: |
+            image-build.log
+            out/*-filesystems.tar.zst*
+            out/*-installer/image.json
+          retention-days: 14

@@ -1,0 +1,35 @@
+name: Checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  # packages.yml runs these before it builds anything.
+  workflow_call:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    # Debian testing's own tools: check-basics follows its systemd's logind
+    # lookup, and the bootchain tests need dtc.
+    container: debian:testing
+    steps:
+      - name: Install the test tools
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates device-tree-compiler e2fsprogs git python3 systemd >/dev/null
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Unit tests and recipes
+        run: bash scripts/test
+      - name: Shell syntax
+        run: |
+          for file in scripts/*; do
+            [[ -f $file && $file != *.py ]] || continue
+            bash -n "$file"
+          done

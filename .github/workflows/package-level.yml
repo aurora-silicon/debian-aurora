@@ -1,0 +1,84 @@
+name: Build one dependency level of packages
+# Called by packages.yml once per level. Every recipe of a level builds in
+# its own job, against the packages of the earlier levels: natively on arm64,
+# or in cross mode on amd64 for x86-64 guest code (recipe build_on).
+on:
+  workflow_call:
+    inputs:
+      level:
+        type: number
+        required: true
+      packages:
+        description: JSON list of the recipes of this level, as {"name", "runner"} objects
+        type: string
+        required: true
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    runs-on: ${{ matrix.package.runner }}
+    # GitHub's limit for a hosted job.
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(inputs.packages) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # recipe.py dates each changelog entry from the recipe's last commit.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the packages of the earlier levels
+        if: inputs.level > 0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: debian-package-*
+          merge-multiple: true
+          path: out/packages
+      - name: Build natively in a Debian testing container
+        env:
+          PACKAGE: ${{ matrix.package.name }}
+          CROSS: ${{ matrix.package.runner == 'ubuntu-24.04' && '--cross' || '' }}
+        run: |
+          set -euo pipefail
+          # sbuild and mmdebstrap build in unprivileged user namespaces, which
+          # Ubuntu's AppArmor policy restricts on the runner.
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          mkdir -p out/packages
+          find out/packages -maxdepth 1 \( -type f -o -type l \) -printf '%f\n' | sort > "$RUNNER_TEMP/inputs"
+          docker run --rm --privileged -v "$PWD:/src" -w /src -e PACKAGE -e CROSS -e BUILDER_UID="$(id -u)" \
+            debian:testing bash -euo pipefail -c '
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates \
+                debian-archive-keyring dpkg-dev git mmdebstrap patch python3 sbuild uidmap xz-utils >/dev/null
+              # The unshare backend runs as an ordinary user with subordinate IDs.
+              useradd --create-home --uid "$BUILDER_UID" builder
+              usermod --add-subuids 100000-165535 --add-subgids 100000-165535 builder
+              runuser -u builder -- env AURORA_BUILD_JOBS="$(nproc)" scripts/build-package $CROSS "$PACKAGE"
+            ' 2>&1 | tee build.log
+          # Only this recipe's own results go into its artifact.
+          mkdir -p out/built
+          find out/packages -maxdepth 1 \( -type f -o -type l \) -printf '%f\n' | sort |
+            comm -13 "$RUNNER_TEMP/inputs" - | while read -r file; do mv "out/packages/$file" out/built/; done
+          ls -l out/built
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: success()
+        with:
+          name: debian-package-${{ matrix.package.name }}
+          path: out/built/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      # A failed attempt keeps its log under a name later levels never read.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: failed-${{ matrix.package }}-attempt-${{ github.run_attempt }}
+          path: build.log
+          retention-days: 14

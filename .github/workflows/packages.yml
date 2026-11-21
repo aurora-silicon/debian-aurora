@@ -1,0 +1,221 @@
+name: Debian Aurora packages
+on:
+  push:
+    branches: [main]
+    paths: [packages/**, scripts/build-package, scripts/recipe.py, scripts/sign-repository.py, images/base.json,
+            sources.json, keys/**, .github/workflows/packages.yml, .github/workflows/package-level.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: debian-packages-${{ github.ref }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+
+  # Every recipe builds once, natively on arm64, after the recipes whose
+  # packages it build-depends on. The plan prepares each source package and
+  # groups the recipes into levels by the Build-Depends and Binary fields of
+  # their .dsc files.
+  plan:
+    needs: checks
+    runs-on: ubuntu-24.04
+    outputs:
+      level0: ${{ steps.plan.outputs.level0 }}
+      level1: ${{ steps.plan.outputs.level1 }}
+      level2: ${{ steps.plan.outputs.level2 }}
+      level3: ${{ steps.plan.outputs.level3 }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Order the recipes by their build dependencies
+        id: plan
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/levels.py" <<'PY'
+          import json, re, subprocess, sys
+          from pathlib import Path
+
+          def fields(path):
+              values, key = {}, None
+              for line in path.read_text().splitlines():
+                  if line[:1] in (' ', '\t') and key:
+                      values[key] += ' ' + line.strip()
+                  elif ':' in line:
+                      key, _, value = line.partition(':')
+                      values[key] = value.strip()
+              return values
+
+          def names(relation):
+              found = set()
+              for alternative in re.split(r'[,|]', relation):
+                  alternative = re.sub(r'\([^)]*\)|\[[^]]*\]|<[^>]*>', '', alternative).strip()
+                  if alternative:
+                      found.add(alternative.split(':')[0])
+              return found
+
+          recipes = sorted(path.parent.name for path in Path('packages').glob('*/recipe.json'))
+          built, needs = {}, {}
+          for name in recipes:
+              # recipe.py prints the .dsc last; patch output may come before it.
+              output = subprocess.run([sys.executable, 'scripts/recipe.py', 'prepare', name, f'out/work/{name}'],
+                                      stdout=subprocess.PIPE, text=True, check=True).stdout
+              source = fields(Path(output.splitlines()[-1]))
+              for binary in source['Binary'].split(','):
+                  built[binary.strip()] = name
+              needs[name] = set().union(*(names(source.get(key, '')) for key in
+                                          ('Build-Depends', 'Build-Depends-Arch', 'Build-Depends-Indep')))
+          depends = {name: {built[package] for package in needs[name] if package in built} - {name}
+                     for name in recipes}
+
+          def reachable(start):
+              seen, stack = set(), [start]
+              while stack:
+                  for name in depends[stack.pop()]:
+                      if name not in seen:
+                          seen.add(name)
+                          stack.append(name)
+              return seen
+
+          reach = {name: reachable(name) for name in recipes}
+          # Recipes that build-depend on each other (mutter and
+          # gnome-settings-daemon) share a level and build against Debian's
+          # packages of each other.
+          after = {name: {other for other in reach[name] if name not in reach[other]} for name in recipes}
+          level = {}
+
+          def place(name):
+              if name not in level:
+                  level[name] = 1 + max((place(other) for other in after[name]), default=-1)
+              return level[name]
+
+          def runner(name):
+              # x86-64 guest code builds on an amd64 runner (recipe build_on).
+              recipe = json.loads(Path(f'packages/{name}/recipe.json').read_text())
+              return 'ubuntu-24.04' if recipe.get('build_on') == 'amd64' else 'ubuntu-24.04-arm'
+
+          levels = [[] for _ in range(1 + max(place(name) for name in recipes))]
+          for name in recipes:
+              levels[level[name]].append({'name': name, 'runner': runner(name)})
+          for number, members in enumerate(levels):
+              print(f'level {number}:', ' '.join(member['name'] for member in members), file=sys.stderr)
+          Path(sys.argv[1]).write_text(json.dumps(levels) + '\n')
+          PY
+          docker run --rm -v "$PWD:/src" -v "$RUNNER_TEMP:/plan" -w /src -e BUILDER_UID="$(id -u)" \
+            debian:testing bash -euo pipefail -c '
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates \
+                debian-archive-keyring dpkg-dev git patch python3 xz-utils >/dev/null
+              useradd --create-home --uid "$BUILDER_UID" builder
+              runuser -u builder -- python3 /plan/levels.py /plan/levels.json
+            '
+          # One job below per level; a deeper graph needs another one.
+          jq -e 'length <= 4' "$RUNNER_TEMP/levels.json" >/dev/null ||
+            { echo 'The recipes need more than four build levels; add a level job' >&2; exit 1; }
+          for number in 0 1 2 3; do
+            echo "level$number=$(jq -c ".[$number] // []" "$RUNNER_TEMP/levels.json")" >> "$GITHUB_OUTPUT"
+          done
+
+  level0:
+    needs: plan
+    uses: ./.github/workflows/package-level.yml
+    with:
+      level: 0
+      packages: ${{ needs.plan.outputs.level0 }}
+  level1:
+    needs: [plan, level0]
+    if: needs.plan.outputs.level1 != '[]'
+    uses: ./.github/workflows/package-level.yml
+    with:
+      level: 1
+      packages: ${{ needs.plan.outputs.level1 }}
+  level2:
+    needs: [plan, level1]
+    if: needs.plan.outputs.level2 != '[]'
+    uses: ./.github/workflows/package-level.yml
+    with:
+      level: 2
+      packages: ${{ needs.plan.outputs.level2 }}
+  level3:
+    needs: [plan, level2]
+    if: needs.plan.outputs.level3 != '[]'
+    uses: ./.github/workflows/package-level.yml
+    with:
+      level: 3
+      packages: ${{ needs.plan.outputs.level3 }}
+
+  # The signing key is only in the testing-signing environment, and it signs
+  # in a container without network.
+  sign:
+    needs: [level0, level1, level2, level3]
+    # Levels the graph does not need are skipped, not failed.
+    if: ${{ !cancelled() && !failure() && needs.level0.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    environment: testing-signing
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: debian-package-*
+          merge-multiple: true
+          path: candidate
+      - name: Prepare the isolated signer before loading credentials
+        run: |
+          docker build -t debian-aurora-signer - <<'EOF'
+          FROM debian:testing
+          RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                apt-utils gnupg gpgv python3 xz-utils && rm -rf /var/lib/apt/lists/*
+          EOF
+      - name: Sign and verify the repository
+        env:
+          DEBIAN_SIGNING_KEY: ${{ secrets.DEBIAN_SIGNING_KEY }}
+          DEBIAN_SIGNING_PASSPHRASE: ${{ secrets.DEBIAN_SIGNING_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          # --production refuses any key but the one in keys/fingerprint.txt
+          # and a keyring package that carries the development key.
+          docker run --rm --network none -e DEBIAN_SIGNING_KEY -e DEBIAN_SIGNING_PASSPHRASE \
+            -v "$PWD:/src" -w /src debian-aurora-signer bash -euo pipefail -c '
+              export GNUPGHOME=$(mktemp -d)
+              printf "%s\n" "$DEBIAN_SIGNING_KEY" | gpg --batch --quiet --import
+              python3 scripts/sign-repository.py --production --channel testing --packages candidate --output repository
+            '
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-debian-repository
+          path: repository/
+          compression-level: 0
+          retention-days: 30
+
+  publish:
+    needs: sign
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signed-debian-repository
+          path: repository
+      # A release keeps the snapshot as one archive (asset names cannot hold
+      # the repository's directories); images.yml serves it to the image
+      # build. Enable immutable releases on the repository so a published
+      # snapshot cannot change.
+      - name: Publish the immutable package snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="testing-$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          tar -C repository -cf debian-aurora-repository.tar .
+          gh release create "$tag" debian-aurora-repository.tar --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "Debian Aurora $tag" \
+            --notes 'Signed Aurora Debian packages (suite aurora, component main) for Debian testing on Apple Silicon Macs: an apt repository in one archive. Development snapshot; not hardware-qualified.'

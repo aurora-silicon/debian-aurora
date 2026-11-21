@@ -1,0 +1,15 @@
+#!/bin/bash
+# Run every unit test in the repository and validate every recipe.
+#
+#   scripts/test
+#
+# The bootchain tests need dtc and fdtget (device-tree-compiler) and skip
+# without them; one check-basics test needs systemd-analyze.
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+# Recipe directories are source: leave no bytecode in them.
+export PYTHONDONTWRITEBYTECODE=1
+python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m unittest discover -s packages/asahi-scripts/debian -p 'test_bootchain*.py'
+python3 scripts/recipe.py check
