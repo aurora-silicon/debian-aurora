@@ -1,0 +1,89 @@
+#!/bin/bash
+# Build Aurora Debian packages from packages/<name> recipes in a clean,
+# unprivileged Debian testing build root (sbuild's unshare backend).
+#
+#   scripts/build-package [--cross] NAME...
+#
+# Native AArch64 builds are the reference (CI). On another host, --cross
+# builds the arm64 packages with Debian's cross toolchain; without it the
+# arm64 build root runs under qemu-user binfmt emulation. Binary packages are
+# written to out/packages/ (or $AURORA_PACKAGES_DIR), which later builds in
+# the same run also use.
+set -euo pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+fail() { echo "build-package: $*" >&2; exit 1; }
+
+cross=0
+names=()
+for argument in "$@"; do
+  case $argument in
+    --cross) cross=1 ;;
+    -*) fail "unknown option $argument" ;;
+    *) names+=("$argument") ;;
+  esac
+done
+(( ${#names[@]} > 0 )) || fail 'usage: build-package [--cross] NAME...'
+
+jobs=${AURORA_BUILD_JOBS:-10}
+[[ $jobs =~ ^[1-9][0-9]*$ ]] || fail 'AURORA_BUILD_JOBS must be a positive integer'
+build_arch=$(dpkg --print-architecture)
+if (( cross )); then
+  [[ $build_arch != arm64 ]] || fail '--cross is for a non-arm64 build host'
+  chroot_arch=$build_arch
+else
+  chroot_arch=arm64
+fi
+
+read -r suite mirror < <(python3 -c '
+import json, sys
+base = json.load(open(sys.argv[1]))
+print(base["suite"], base["mirror"])' "$root/images/base.json")
+components=$(python3 -c 'import json, sys; print(" ".join(json.load(open(sys.argv[1]))["components"]))' \
+  "$root/images/base.json")
+snapshot=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["snapshot"])' "$root/images/base.json")
+
+# One build root per snapshot and architecture, rebuilt when the pin moves.
+chroot=${AURORA_BUILD_CHROOT:-$root/cache/build-root-$suite-$snapshot-$chroot_arch.tar}
+mkdir -p "$(dirname -- "$chroot")"
+exec 9> "$chroot.lock"
+flock 9
+if [[ ! -f $chroot ]]; then
+  mmdebstrap --mode=unshare --format=tar --variant=buildd --architectures="$chroot_arch" \
+    --include=ca-certificates \
+    --components="${components// /,}" \
+    --aptopt='Acquire::Check-Valid-Until "false"' \
+    --aptopt='Acquire::Retries "5"' \
+    "$suite" "$chroot.part" "$mirror"
+  mv -- "$chroot.part" "$chroot"
+fi
+flock -u 9
+
+packages=${AURORA_PACKAGES_DIR:-$root/out/packages}
+mkdir -p "$packages"
+for name in "${names[@]}"; do
+  work=$root/out/work/$name
+  dsc=$(python3 "$root/scripts/recipe.py" prepare "$name" "$work")
+  network=$(python3 "$root/scripts/recipe.py" field "$name" network)
+  cross_ok=$(python3 "$root/scripts/recipe.py" field "$name" cross)
+  build_on=$(python3 "$root/scripts/recipe.py" field "$name" build_on)
+  # x86-64 guest code (FEX) is built on an amd64 machine, in cross mode.
+  if [[ $build_on == amd64 ]] && ! (( cross )) || [[ $build_on == amd64 && $build_arch != amd64 ]]; then
+    fail "$name builds on an amd64 machine: build-package --cross $name"
+  fi
+  options=(--chroot-mode=unshare --chroot="$chroot" --dist="$suite"
+           --build-dir="$packages" --jobs="$jobs" --arch-any --arch-all --no-run-lintian --no-run-piuparts
+           --no-run-autopkgtest --no-apt-upgrade --no-apt-distupgrade
+           --build-dep-resolver=apt --extra-package="$packages")
+  if (( cross )); then
+    [[ $cross_ok != false ]] || fail "$name builds only natively"
+    options+=(--build="$build_arch" --host=arm64)
+  else
+    options+=(--arch=arm64)
+  fi
+  # Pinned toolchains (rustup) and vendored dependencies are fetched by the
+  # build itself; their recipes say so.
+  [[ $network == true ]] && options+=(--enable-network) || options+=(--no-enable-network)
+  echo "Building $name from ${dsc#"$root/"}"
+  sbuild "${options[@]}" "$dsc"
+done

@@ -1,0 +1,9 @@
+{
+  "suite": "testing",
+  "codename": "forky",
+  "snapshot": "20261120T000000Z",
+  "mirror": "https://snapshot.debian.org/archive/debian/20261120T000000Z",
+  "live_mirror": "https://deb.debian.org/debian",
+  "components": ["main", "non-free-firmware"],
+  "keyring": "/usr/share/keyrings/debian-archive-keyring.gpg"
+}

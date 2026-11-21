@@ -1,0 +1,4 @@
+/out/
+/cache/
+__pycache__/
+packages/aurora-archive-keyring/keys/development.asc
