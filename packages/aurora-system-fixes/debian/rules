@@ -1,0 +1,47 @@
+#!/usr/bin/make -f
+PKG := debian/aurora-system-fixes
+SYSTEMD := $(PKG)/usr/lib/systemd
+UDEV := $(PKG)/usr/lib/udev
+
+%:
+	dh $@
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	bash -n aurora-wake-for-network
+	grep -qx 'ConditionFirmware=device-tree-compatible(apple,arm-platform)' aurora-power-defaults.service
+	grep -qx 'ExecStart=/usr/sbin/sysctl -q -w kernel.sched_util_clamp_min_rt_default=0' aurora-power-defaults.service
+	grep -qx 'ExecStart=/usr/libexec/nm-dispatcher --persist' nm-dispatcher-persist.conf
+endif
+
+# Paths as in alarm-aurora (merged /usr), with Debian's nm-dispatcher and
+# sysctl locations. aurora-power-defaults is wanted by sysinit.target from the
+# package itself (a static link, as in alarm-aurora), so upgrades get it too;
+# ConditionFirmware skips machines that are not Apple silicon Macs.
+override_dh_auto_install:
+	install -Dm644 50-after-swapfile.conf $(SYSTEMD)/system/var-swap-swapfile2.swap.d/50-after-swapfile.conf
+	install -Dm644 61-aurora-dmi-id.rules $(UDEV)/rules.d/61-aurora-dmi-id.rules
+	install -Dm644 62-aurora-gpu-render-only.rules $(UDEV)/rules.d/62-aurora-gpu-render-only.rules
+	install -Dm755 aurora-wake-for-network $(PKG)/usr/lib/aurora/aurora-wake-for-network
+	install -Dm644 63-aurora-wake-for-network.rules $(UDEV)/rules.d/63-aurora-wake-for-network.rules
+	install -Dm644 64-aurora-trackpad-clicks.rules $(UDEV)/rules.d/64-aurora-trackpad-clicks.rules
+	install -Dm644 60-aurora-trackpad-palms.quirks $(PKG)/usr/share/libinput/60-aurora-trackpad-palms.quirks
+	install -Dm644 60_aurora-apple-keys.gschema.override $(PKG)/usr/share/glib-2.0/schemas/60_aurora-apple-keys.gschema.override
+	install -Dm644 60-aurora-dmi-vendor.hwdb $(UDEV)/hwdb.d/60-aurora-dmi-vendor.hwdb
+	install -Dm644 90-aurora-reboot-watchdog.conf $(SYSTEMD)/system.conf.d/90-aurora-reboot-watchdog.conf
+	install -Dm644 aurora-power-defaults.service $(SYSTEMD)/system/aurora-power-defaults.service
+	install -d $(SYSTEMD)/system/sysinit.target.wants
+	ln -s ../aurora-power-defaults.service $(SYSTEMD)/system/sysinit.target.wants/aurora-power-defaults.service
+	set -e; for unit in drkonqi-coredump-cleanup.timer drkonqi-sentry-postman.path; do \
+	  install -Dm644 drkonqi-ordering.conf $(SYSTEMD)/user/$$unit.d/50-aurora-ordering.conf; \
+	done
+	install -Dm644 nm-dispatcher-persist.conf $(SYSTEMD)/system/NetworkManager-dispatcher.service.d/50-aurora-persist.conf
+
+# alarm-aurora's package neither starts the unit on installation nor stops it
+# on upgrade; it applies from the next boot.
+override_dh_installsystemd:
+	dh_installsystemd --no-start --no-stop-on-upgrade
+
+# The override only matters with gnome-shell's schemas installed; glib's
+# trigger compiles it. It needs no GSettings backend of its own.
+override_dh_installgsettings:

@@ -1,0 +1,21 @@
+Source: omarchy-ane-tools
+Section: utils
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), dh-sequence-installsysusers, libdrm-dev, python3 <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/joshuaswarren/omarchy-ane
+Rules-Requires-Root: no
+
+Package: omarchy-ane-tools
+Architecture: arm64
+Depends: python3, ${shlibs:Depends}, ${misc:Depends}
+Description: Apple Neural Engine userspace tools for the in-kernel ANE driver
+ Userspace for the Apple Neural Engine driver in Aurora's kernel:
+ omarchy-ane-run (with libane linked statically), omarchy-ane-smoke, which
+ runs 20 add calls and reports one JSON result, and
+ omarchy-ane-firmware-fetch, which installs this Mac's ANE firmware when its
+ owner runs it. Members of the accel group get access to the device node.
+ .
+ The package installs no kernel module, device-tree overlay, firmware or
+ model, and runs nothing at installation.

@@ -1,0 +1,44 @@
+#!/usr/bin/make -f
+# alarm-aurora's mil-hwx-compiler recipe: the private libobjc2, GNUstep Make
+# and GNUstep Base from the pinned component sources, then mil-hwxc linked
+# against them, installed under /usr/lib/mil-hwx-compiler.
+JOBS := $(or $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS))),1)
+RUNTIME := debian/runtime-src
+GNUSTEP := GNUSTEP_PREFIX=$(CURDIR)/.gnustep CXX=clang++
+# GNUstep's tools write user defaults below $HOME.
+export HOME := $(CURDIR)/debian/home
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+# The component sources are copied, so the build leaves them untouched.
+override_dh_auto_build:
+	rm -rf $(RUNTIME) && mkdir -p $(RUNTIME) $(HOME)
+	cp -a libobjc2 gnustep-make gnustep-base $(RUNTIME)/
+	JOBS=$(JOBS) bash debian/build-runtime.sh $(RUNTIME)
+	$(MAKE) build/mil-hwxc $(GNUSTEP)
+
+# The H13 software suite and the H14 fixture check; no device is needed.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	LD_LIBRARY_PATH=$(CURDIR)/.gnustep/lib $(MAKE) test-h13 $(GNUSTEP)
+	LD_LIBRARY_PATH=$(CURDIR)/.gnustep/lib python3 tests/test_h14_fixture_programs.py build/mil-hwxc
+endif
+
+override_dh_auto_install:
+	bash debian/install-runtime.sh $(CURDIR)/debian/mil-hwx-compiler/usr
+
+# The private libraries provide no shared library for other packages.
+override_dh_makeshlibs:
+	dh_makeshlibs -X/usr/lib/mil-hwx-compiler
+
+override_dh_shlibdeps:
+	dh_shlibdeps -l$(CURDIR)/debian/mil-hwx-compiler/usr/lib/mil-hwx-compiler
+
+# dwz does not know clang's DWARF 5 sections (.debug_str_offsets, .debug_addr).
+override_dh_dwz:
+
+override_dh_auto_clean:
+	rm -rf build .gnustep .objc-build $(RUNTIME) $(HOME)

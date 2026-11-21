@@ -1,0 +1,9 @@
+{
+  "source": "iwd",
+  "version": "3.12-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "iwd", "version": "3.12-1"},
+  "changes": "Support OWE on FullMAC devices that offload it (NL80211_EXT_FEATURE_OWE_OFFLOAD), for the MacBook Neo's MediaTek MT7932.\nFix the four parser and buffer bugs from oss-security 2026/08/02 (rrm beacon report overflow, HE capabilities width set, mde_equal, FTE sub-element underflow), as alarm-aurora does.",
+  "alarm": ["iwd-aurora"],
+  "notes": "alarm-aurora's 0001-use-network-group-for-unprivileged-access.diff is Arch's group convention; Debian keeps upstream's netdev group, so it is not carried."
+}

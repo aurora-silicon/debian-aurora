@@ -1,0 +1,10 @@
+{
+  "source": "firefox",
+  "version": "160.0.1-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "firefox", "version": "160.0.1-1", "suite": "unstable"},
+  "cross": false,
+  "changes": "Allow V4L2 stateless (Request API) decoders in the RDD sandbox: the media controller of an allowed M2M decoder, its uevent and four media ioctls (Mozilla bug 2080696), so libva-v4l2-request decodes video in hardware.\nAllow sysinfo in the RDD sandbox, which Mesa's zink driver needs to create the GBM device behind VA-API DMABuf surfaces.\nBuilt from Debian unstable's Firefox in a Debian testing build root, so Aurora Debian ships the current Firefox like the other Aurora distributions.\nBuild without debug symbols on arm64 (packaging.patch), as alarm-aurora and fedora-aurora build Firefox for aarch64: with Debian's debug info, rustc needs more than 13 GB of memory for gkrust alone.",
+  "alarm": ["firefox"],
+  "notes": "Debian testing ships only Firefox ESR; the rapid-release firefox stays in unstable. alarm-aurora, fedora-aurora, nixos-aurora and omarchy-aurora ship the current Firefox with the same patch: patches/0001 and 0002 are their rdd-v4l2-request.patch split at its two commits, unchanged (concatenated, sha256 8bf37b91...), because dpkg-source refuses a quilt patch that changes a file twice. Every versioned build dependency resolves in testing, so only the source comes from unstable. Arch's 0001-Install-under-remoting-name.patch is not carried (Arch's, for installing channels side by side). Built natively on arm64 only (too large to emulate)."
+}

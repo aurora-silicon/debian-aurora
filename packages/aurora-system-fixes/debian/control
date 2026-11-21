@@ -1,0 +1,27 @@
+Source: aurora-system-fixes
+Section: admin
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/alarm-aurora
+Rules-Requires-Root: no
+
+Package: aurora-system-fixes
+Architecture: all
+Multi-Arch: foreign
+Depends: systemd, udev, bluez (>= 5.87), ethtool, iw, procps,
+ aurora-panel-nits, aurora-nvram, aurora-btsync, ${misc:Depends}
+Description: Aurora system drop-ins awaiting named upstream fixes
+ systemd, udev, libinput and GSettings defaults for Apple Silicon Macs, each
+ waiting for a named upstream fix or recording a platform decision:
+  - the hardware model and vendor names from the firmware, unmangled;
+  - the render-only GPU card left alone by mutter;
+  - wake for network access while on the power adapter, as on macOS;
+  - trackpad clicks played by the host where the trackpad has an actuator;
+  - no libinput palm size threshold where the kernel decides palms by size;
+  - the Mission Control key opening the GNOME overview;
+  - a reboot or kexec watchdog within the Apple watchdog's range;
+  - PCIe ASPM substates and no realtime utilization floor;
+  - ordering fixes for DrKonqi's user units, the NetworkManager dispatcher
+    and a second Btrfs swapfile.

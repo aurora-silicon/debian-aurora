@@ -1,0 +1,29 @@
+Description: Find the smoke fixtures under the installation prefix
+ omarchy-ane-smoke looks for its fixtures beside the source tree
+ (HERE.parent / "fixtures"); installed in /usr/bin, they are in
+ /usr/share/omarchy-ane/fixtures. Its recovery messages name the package that
+ ships the runner and fixtures. The same change as alarm-aurora's
+ fix-smoke.py (identical in fedora-aurora and nixos-aurora).
+Author: Aurora Silicon <noreply@aurorasilicon.org>
+Forwarded: not-needed
+
+--- a/packaging/omarchy-ane-smoke
++++ b/packaging/omarchy-ane-smoke
+@@ -150,14 +150,14 @@
+     if chip not in FIXTURE:
+         raise Unavailable(f"{chip}: no omarchy-ane driver for this chip")
+     rel = FIXTURE[chip]
+-    anec = next((d / rel for d in (root / FIXTURES, HERE.parent / "fixtures") if (d / rel).is_file()), None)
++    anec = next((d / rel for d in (root / FIXTURES, HERE.parent / "share/omarchy-ane/fixtures") if (d / rel).is_file()), None)
+     if anec is None:
+-        raise Unavailable(f"{root / FIXTURES / rel} is missing. Reinstall omarchy-ane-dkms.")
++        raise Unavailable(f"{root / FIXTURES / rel} is missing. Reinstall omarchy-ane-tools.")
+     if chip in M3:
+         raise Unavailable("no driver for this chip can run a job yet")
+     runner = tool("omarchy-ane-run", "tools/ane-run")
+     if runner is None:
+-        raise Unavailable("omarchy-ane-run is missing. Reinstall omarchy-ane-dkms.")
++        raise Unavailable("omarchy-ane-run is missing. Reinstall omarchy-ane-tools.")
+     module = MODULE[chip]
+     drivers = root / "sys/bus/platform/drivers" / module
+     if not any(p.is_symlink() and p.name != "module" for p in drivers.glob("*")):

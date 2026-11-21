@@ -1,0 +1,15 @@
+--- a/debian/rules
++++ b/debian/rules
+@@ -96,6 +96,12 @@
+ ifeq (riscv64,$(DEB_BUILD_ARCH))
+ 	CONFIGURE_FLAGS += --disable-debug-symbols
+ endif
++# Aurora: and on arm64, as alarm-aurora and fedora-aurora build Firefox for
++# aarch64 (Rust debuginfo 0, no C/C++ debug info): with debug info, rustc needs
++# more than 13 GB of memory for gkrust alone.
++ifeq (arm64,$(DEB_BUILD_ARCH))
++	CONFIGURE_FLAGS += --disable-debug-symbols
++endif
+ 
+ CONFIGURE_FLAGS += --enable-update-channel=$(CHANNEL)
+ 

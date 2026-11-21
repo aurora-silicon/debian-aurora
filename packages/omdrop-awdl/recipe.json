@@ -1,0 +1,9 @@
+{
+  "source": "omdrop-awdl",
+  "version": "0.10.5-1",
+  "kind": "upstream",
+  "upstream": {"pin": "omdrop-awdl"},
+  "changes": "AirDrop over the Wi-Fi firmware's own AWDL (awdl0) on Apple Silicon Macs: the omdrop-awdl helpers with alarm-aurora's three patches (accept NetworkManager's per-network cloned MAC, follow the infra channel, set the 5 GHz social channel) and the omdrop-plugin receiver, all installed off, as alarm-aurora's omdrop-awdl 0.10.5-1.",
+  "alarm": ["omdrop-awdl"],
+  "notes": "Needs the pin's extra source omdrop-plugin as a component tarball (orig-omdrop-plugin, unpacked in omdrop-plugin/), which scripts/recipe.py does not provide yet: prepare fails at the receiver patch until it does (see docs/parity/apps.md). The receiver installs omdrop-plugin's public Apple root and AAI CA certificates, as alarm-aurora does."
+}

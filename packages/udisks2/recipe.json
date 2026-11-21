@@ -1,0 +1,8 @@
+{
+  "source": "udisks2",
+  "version": "2.11.2-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "udisks2", "version": "2.11.2-1"},
+  "changes": "Size NVMe drives without Total NVM Capacity (Apple silicon SSDs) from their namespaces, so Drive.Size is not 0 (backport of upstream f032f09cc760 for 2.11.x, the same patch as alarm-aurora and fedora-aurora).",
+  "alarm": ["udisks2"]
+}

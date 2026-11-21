@@ -1,0 +1,8 @@
+{
+  "source": "aurora-system-fixes",
+  "version": "1.15",
+  "kind": "native",
+  "changes": "Aurora's systemd, udev, libinput and GSettings drop-ins from alarm-aurora's aurora-system-fixes 1-15, with Debian's nm-dispatcher and sysctl paths; the malcontent drop-ins are left out because Debian's malcontent 0.13.1 has none of those units.",
+  "alarm": ["aurora-system-fixes"],
+  "notes": "The version is alarm-aurora's 1-15 (a native version has no revision)."
+}

@@ -1,0 +1,22 @@
+Source: mil-hwx-compiler
+Section: devel
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), clang, lld, cmake, ninja-build, make, pkgconf, robin-map-dev,
+ libffi-dev, libxml2-dev, libicu-dev, libssl-dev, zlib1g-dev, python3, patchelf, git <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/joshuaswarren/mil-hwx-compiler
+Rules-Requires-Root: no
+
+Package: mil-hwx-compiler
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Open MIL to Apple Neural Engine HWX and ANEC compiler
+ mil-hwxc compiles open MIL input to programs for the Apple Neural Engine
+ (H13 ANEC, H14 and later HWX), without Apple frameworks, firmware, models or
+ a device. It does not install a driver; Aurora's kernel provides it, and
+ omarchy-ane-tools runs the programs.
+ .
+ mil-hwxc uses a private build of libobjc2 and GNUstep Base with the
+ Objective-C ARC ABI, installed in /usr/lib/mil-hwx-compiler. It does not
+ replace or provide the system's GNUstep libraries.

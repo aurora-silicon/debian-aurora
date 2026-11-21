@@ -1,0 +1,10 @@
+{
+  "source": "network-manager",
+  "version": "1.58.1-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "network-manager", "version": "1.58.1-1"},
+  "changes": "Keep a Wake-on-LAN/WLAN device that is still activated after wake instead of taking it down and reconnecting it (the same patch as alarm-aurora and fedora-aurora).",
+  "alarm": ["networkmanager-aurora"],
+  "cross": false,
+  "notes": "Not cross-buildable as Debian packages it: the introspection and documentation build needs python3-gi for the host architecture next to the build architecture's meson. alarm-aurora also carries Arch's GLib 2.89 test fix (NetworkManager MR 2548); Debian 1.58.1-1 already has it as Fix-test-suite-failure-with-glib-2.89.patch."
+}

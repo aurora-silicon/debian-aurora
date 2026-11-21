@@ -1,0 +1,66 @@
+#!/usr/bin/make -f
+# alarm-aurora's omdrop-awdl recipe: the helpers keep upstream's
+# /usr/lib/omdrop; the receiver comes from the omdrop-plugin component
+# (omdrop-plugin/ in the source tree). Everything is installed off.
+PKG := debian/omdrop-awdl
+LIB := $(PKG)/usr/lib/omdrop
+RECEIVER := $(PKG)/usr/share/omdrop/receiver
+PLUGIN := omdrop-plugin
+
+%:
+	dh $@
+
+override_dh_auto_configure override_dh_auto_build:
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	set -e; for f in userspace/* userspace/radio/* packaging/omdrop-awdl-sleep; do \
+	  [ -f "$$f" ] || continue; \
+	  case "$$f" in \
+	    *.sh) bash -n "$$f"; continue ;; \
+	    *.py) python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$$f"; continue ;; \
+	  esac; \
+	  case "$$(head -n1 "$$f")" in \
+	    *bash*|*/sh) bash -n "$$f" ;; \
+	    *python*) python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$$f" ;; \
+	  esac; \
+	done
+	grep -q stable-ssid userspace/awdl-up
+	grep -q '^follow_infra()' userspace/awdl-up
+	grep -q awdl_osoc_chan userspace/omdrop-broadcom.sh
+	! grep -q '@PLUGIN_DIR@' $(PLUGIN)/share/airdrop-receiver.service
+endif
+
+override_dh_auto_install:
+	install -d $(LIB)/radio
+	set -e; for f in userspace/*; do \
+	  [ -f "$$f" ] || continue; \
+	  case "$$f" in *_*.py|*.sh) m=644 ;; *) m=755 ;; esac; \
+	  install -Dm$$m "$$f" $(LIB)/$${f##*/}; \
+	done
+	install -m755 userspace/radio/* $(LIB)/radio/
+	install -Dm644 packaging/awdl0.service $(PKG)/usr/lib/systemd/system/awdl0.service
+	install -Dm644 packaging/awdl-warmup.service $(PKG)/usr/lib/systemd/system/awdl-warmup.service
+	install -Dm755 packaging/omdrop-awdl-sleep $(PKG)/usr/lib/systemd/system-sleep/omdrop-awdl
+	install -Dm644 packaging/org.omarchy.omdrop.policy $(PKG)/usr/share/polkit-1/actions/org.omarchy.omdrop.policy
+	install -Dm644 packaging/99-awdl-unmanaged.conf $(PKG)/usr/lib/NetworkManager/conf.d/99-awdl-unmanaged.conf
+	set -e; for f in airdrop-serve.py contacts.py debugdump.py identity.py lifecycle.py safeplist.py; do \
+	  install -Dm644 $(PLUGIN)/bin/$$f $(RECEIVER)/bin/$$f; \
+	done
+	chmod 755 $(RECEIVER)/bin/airdrop-serve.py
+	install -Dm644 -t $(RECEIVER)/bin/apple-ca $(PLUGIN)/bin/apple-ca/*.pem
+	# The public root airdrop-serve.py loads at start (Contacts Only checks).
+	install -Dm644 $(PLUGIN)/share/certs/apple_root_ca.pem $(RECEIVER)/share/certs/apple_root_ca.pem
+	install -Dm644 $(PLUGIN)/README.md $(RECEIVER)/README.md
+	install -Dm644 $(PLUGIN)/share/airdrop-receiver.service $(PKG)/usr/lib/systemd/user/airdrop-receiver.service
+
+override_dh_installdocs:
+	dh_installdocs README.md
+
+# Installed off, as in alarm-aurora: nothing enables or starts awdl0.service,
+# awdl-warmup.service (which upstream enables) or the user's receiver.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
+
+override_dh_installsystemduser:
+	dh_installsystemduser --no-enable

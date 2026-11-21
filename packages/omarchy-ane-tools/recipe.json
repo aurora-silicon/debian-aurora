@@ -1,0 +1,10 @@
+{
+  "source": "omarchy-ane-tools",
+  "version": "0.5.7-1",
+  "kind": "upstream",
+  "upstream": {"pin": "omarchy-ane-tools"},
+  "cross": false,
+  "changes": "Apple Neural Engine userspace tools for Aurora's in-kernel ANE driver at the pinned omarchy-ane commit: omarchy-ane-run, omarchy-ane-smoke, omarchy-ane-firmware-fetch, the H13 and H14 add fixtures, and accel group access, as alarm-aurora's omarchy-ane-tools 0.5.7-2.",
+  "alarm": ["omarchy-ane-tools"],
+  "notes": "Not cross-buildable: libane's Makefile links with a bare ld -r and gcc. sources.json marks this archive redistribute_source: false (it carries unrelated binary research inputs); a Debian source package ships it as the .orig tarball, so the source package must not be published until the framework honours that flag."
+}

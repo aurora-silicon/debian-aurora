@@ -1,0 +1,54 @@
+Description: Install the AirDrop receiver user unit for the packaged receiver
+ Substitute @PLUGIN_DIR@ with /usr/share/omdrop/receiver, and create the two
+ writable paths before the sandbox: the receiver writes its identity into
+ ~/.omdrop, which ProtectHome=read-only keeps it from creating. The same
+ result as alarm-aurora's sed in prepare().
+Author: Aurora Silicon <noreply@aurorasilicon.org>
+Forwarded: no
+
+--- a/omdrop-plugin/share/airdrop-receiver.service
++++ b/omdrop-plugin/share/airdrop-receiver.service
+@@ -6,7 +6,7 @@
+ # (driver, awdl0, gate, announcer, peer registration) belongs to the system
+ # side; this unit only requires that awdl0 exist and carry its link-local.
+ #
+-# @PLUGIN_DIR@ is substituted with the plugin's own directory when `omdrop
++# /usr/share/omdrop/receiver is substituted with the plugin's own directory when `omdrop
+ # setup` installs this file into ~/.config/systemd/user/. Do not install this
+ # template by hand: a unit still carrying the placeholder cannot start, and
+ # setup refuses to write one.
+@@ -18,7 +18,7 @@
+ 
+ [Unit]
+ Description=AirDrop receiver over firmware-native AWDL (awdl0)
+-Documentation=file:@PLUGIN_DIR@/README.md
++Documentation=file:/usr/share/omdrop/receiver/README.md
+ # awdl0 is created by the root-side control plane; wait for it, do not create it.
+ # No After=/BindsTo= on sys-subsystem-net-devices-awdl0.device: awdl0 appears
+ # long after the user manager starts, and on some machines that manager never
+@@ -31,7 +31,7 @@
+ 
+ [Service]
+ Type=simple
+-WorkingDirectory=@PLUGIN_DIR@
++WorkingDirectory=/usr/share/omdrop/receiver
+ # name / model / download_dir come from %h/.config/airdrop/config.toml; the
+ # receiver validates them and refuses to start on a bad value (exit 1, and
+ # systemd's default start limit stops the retry storm that would follow).
+@@ -39,13 +39,15 @@
+ # receiver reported "port 8771 busy, opendrop moved to 8772" and exited 1. It
+ # recovered, but SYNs arriving in that gap hit nothing. Wait for the port to
+ # clear rather than racing for it.
++ExecStartPre=+/usr/bin/mkdir -p -m 0700 %h/.omdrop
++ExecStartPre=+/usr/bin/mkdir -p %h/Downloads
+ ExecStartPre=/bin/sh -c 'for i in $(seq 1 40); do ss -Hltn 2>/dev/null | grep -q ":8771 " || exit 0; sleep 0.25; done; echo "port 8771 still busy after 10s" >&2; exit 1'
+ # awdl0 exists a moment before it carries its link-local, and the receiver
+ # refuses to start without one (under opendrop: "Make sure that `owl` is
+ # running"). This unit once burned three restarts on that gap and gave up.
+ # Wait for the address.
+ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do ip -6 addr show dev awdl0 scope link 2>/dev/null | grep -q inet6 && exit 0; sleep 0.5; done; echo "awdl0 has no link-local after 30s" >&2; exit 1'
+-ExecStart=/usr/bin/python3 @PLUGIN_DIR@/bin/airdrop-serve.py --iface awdl0 --port 8771
++ExecStart=/usr/bin/python3 /usr/share/omdrop/receiver/bin/airdrop-serve.py --iface awdl0 --port 8771
+ Restart=on-failure
+ RestartSec=2s
+ # Hardening: it serves HTTPS on one port and writes into one directory.

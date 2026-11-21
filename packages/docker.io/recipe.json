@@ -1,0 +1,10 @@
+{
+  "source": "docker.io",
+  "version": "28.5.2+dfsg4-5+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "docker.io", "version": "28.5.2+dfsg4-5"},
+  "changes": "libnetwork: query firewalld's permanent policies before creating docker-forwarding, so firewalld no longer logs NAME_CONFLICT at every start (alarm-aurora's patch, rebased onto 28.5.2).",
+  "alarm": ["docker"],
+  "cross": false,
+  "notes": "alarm-aurora builds Docker 29.9.2 from upstream; Debian testing has 28.5.2, where the same function lives in engine/libnetwork/iptables/firewalld.go. The patch adds a unit test (TestSetupDockerForwardingPolicy) that needs no root and no firewalld. Not cross-buildable as Debian packages it: its golang-*-dev build dependencies are Architecture: all without Multi-Arch: foreign."
+}

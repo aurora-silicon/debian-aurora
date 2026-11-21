@@ -1,0 +1,30 @@
+Source: omdrop-awdl
+Section: net
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), python3 <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/netmojo-systems/omdrop-awdl
+Rules-Requires-Root: no
+
+Package: omdrop-awdl
+Architecture: all
+Multi-Arch: foreign
+Depends: bash, coreutils, iproute2, iputils-ping, iw, kmod, openssl, polkitd, pkexec, procps, python3,
+ python3-libarchive-c, systemd, util-linux, ${misc:Depends}
+Recommends: network-manager, python3-pil
+Suggests: bluez, python3-dbus, python3-gi, keyutils
+Conflicts: brcmfmac-awdl-dkms
+Description: AirDrop over firmware-native AWDL on Apple Silicon Macs (opt in)
+ The userspace for AirDrop over the AWDL link that the Broadcom Wi-Fi firmware
+ of Apple Silicon Macs implements and Aurora's brcmfmac exposes as awdl0: the
+ omdrop-awdl helpers that create awdl0 and open discoverability windows, and
+ the omdrop-plugin receiver, run as a user service.
+ .
+ Nothing runs after installation: awdl0.service, awdl-warmup.service and the
+ user's airdrop-receiver.service are installed disabled.
+ .
+ Recommended: network-manager keeps awdl0 unmanaged and settles the Wi-Fi MAC
+ first; python3-pil makes the thumbnail an iPhone needs before it shows a
+ prompt. bluez, python3-dbus and python3-gi send the advert that wakes a
+ nearby Apple device; keyutils holds the optional cached Apple identity.
