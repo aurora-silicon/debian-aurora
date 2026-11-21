@@ -1,0 +1,26 @@
+Source: plymouth-theme-aurora
+Section: misc
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13), python3 <!nocheck>
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/alarm-aurora
+Rules-Requires-Root: no
+
+Package: plymouth-theme-aurora
+Architecture: all
+Depends: fonts-cantarell,
+         plymouth,
+         plymouth-script-keyboard-lifetime (>= 1),
+         plymouth-themes,
+         ${misc:Depends}
+Description: Aurora boot splash
+ aura, the bootloader, draws the Aurora logo centred on a black screen and
+ U-Boot leaves it there. This Plymouth theme draws the same image at the same
+ size and place on every panel, so the logo stays still from power-on until
+ the login screen. The spinner sits below it and the distribution's branding
+ (the spinner theme's watermark) at the bottom. Disk passwords are asked on
+ the same screen; Esc shows the boot messages.
+ .
+ Before plymouthd starts, /usr/libexec/aurora-plymouth reads the boot panel's
+ geometry from the live device tree; a dracut module runs it in the initramfs.

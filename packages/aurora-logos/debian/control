@@ -1,0 +1,21 @@
+Source: aurora-logos
+Section: misc
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/aurora-silicon/alarm-aurora
+Rules-Requires-Root: no
+
+Package: aurora-logos
+Architecture: all
+Multi-Arch: foreign
+Depends: hicolor-icon-theme, ${misc:Depends}
+Replaces: desktop-base
+Description: Aurora desktop icons and Plasma distribution artwork
+ The Aurora logo as the aurora-logo-icon and start-here icons of the hicolor
+ theme and as /usr/share/pixmaps/system-logo-white.png, and the Plasma
+ About this System branding (/etc/xdg/kcm-about-distrorc).
+ .
+ Debian's desktop-base ships its own kcm-about-distrorc; this package takes
+ that file over.

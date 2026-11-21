@@ -1,0 +1,11 @@
+{
+  "source": "plasma-setup",
+  "version": "6.7.4-1",
+  "kind": "upstream",
+  "upstream": {"url": "https://download.kde.org/stable/plasma/6.7.4/plasma-setup-6.7.4.tar.xz",
+               "sha256": "d8d761c78c4ea51eb7e2b9342f10fbe0b46d4cedfeeeb5150c9d387b2eb79d03"},
+  "changes": "Plasma Setup 6.7.4, the release of Debian's Plasma 6.7.4, with alarm-aurora's patch that keeps the setup user's files non-executable.\nThe account it creates joins sudo, Debian's administrator group, instead of wheel, which Debian does not have.",
+  "cross": false,
+  "alarm": ["plasma-setup"],
+  "notes": "alarm-aurora packages 6.8.1 for its Plasma 6.8; this is the 6.7.4 release that matches Debian testing. The tarball's signature verifies against Debian's KDE Plasma upstream keys (debian/upstream/signing-key.asc of kwin; signing subkey B3CB366552540BE06EE9AD9711968C44928CAEFC, the same key alarm-aurora names). plasma-setup.service is installed disabled: alarm-aurora enables it in its KDE image build, not in a preset. It builds only natively or emulated: ecm_find_qmlmodule needs the arm64 qmldir of plasma-desktop's kcm_keyboard module, and plasma-desktop:arm64 is not installable in a cross build root (kde-cli-tools-data is not Multi-Arch: foreign)."
+}

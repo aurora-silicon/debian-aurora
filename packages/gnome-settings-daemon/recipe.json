@@ -1,0 +1,9 @@
+{
+  "source": "gnome-settings-daemon",
+  "version": "51.0-2+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "gnome-settings-daemon", "version": "51.0-2"},
+  "changes": "Colour plugin: an opt-in ambient white point (the ambient-white-point-enabled key, off by default) that follows the ambient light sensor's colour temperature through Mutter's Night Light, the same patch as alarm-aurora's gnome-settings-daemon-aurora and fedora-aurora's gnome-settings-daemon.",
+  "alarm": ["gnome-settings-daemon-aurora"],
+  "notes": "alarm-aurora's patch without its last hunk, which only creates an empty subprojects/.wraplock (a Meson by-product). It applies unchanged to 51.0, which already names the compile-schemas target compiled_schemas (fedora-aurora's 50.1 patch adds that). alarm-aurora's dependency on aurora-keep-config is not carried: dpkg keeps edited conffiles itself."
+}

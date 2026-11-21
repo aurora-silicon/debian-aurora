@@ -1,0 +1,9 @@
+{
+  "source": "plymouth",
+  "version": "26.134.222-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "plymouth", "version": "26.134.222-1"},
+  "changes": "Upstream cea90be3: the default XKB keymap no longer overrides a console KEYMAP.\nDo not load the frame-buffer plugin for the fbdev of a DRM device plymouthd already drives.\nKeep terminal input nonblocking on its own open file description.\nOrder plymouth-start.service after systemd-udevd.service and dracut-pre-trigger.service instead of the whole coldplug (systemd-udev-trigger.service).\nFix the splash keyboard lifetime: script themes are told when a keyboard goes away, and the plymouth package provides plymouth-script-keyboard-lifetime (= 1) for themes that need it.\nReset a previous DRM master's HDR metadata and colorspace before the SDR splash scans out.\nFlush only the damaged areas of the DRM framebuffer.\nThe same carries as alarm-aurora's and fedora-aurora's plymouth.",
+  "alarm": ["plymouth"],
+  "notes": "Patches are alarm-aurora's (the upstream XKB fix as fedora-aurora's copy of cea90be3), numbered in alarm-aurora's application order. The plymouth-start.service patch is rebased onto Debian's unit (drop-systemd-vconsole-setup-service.patch); keyboard-setup.service stays. Arch-only parts are not carried: mkinitcpio hooks and the plymouth-font-file helper (Debian uses dracut, whose plymouth module copies the theme and its font), the Arch logo and watermark, the bgrt default theme and the Adwaita font switch. alarm-aurora's and fedora-aurora's regression programs (test-terminal-input, test-drm-sdr, test-drm-damage, check-keyboard-lifetime.sh) are not wired into Debian's dh_auto_test."
+}

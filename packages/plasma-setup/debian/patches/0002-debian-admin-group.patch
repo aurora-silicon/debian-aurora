@@ -1,0 +1,24 @@
+From: Aurora Silicon <noreply@aurorasilicon.org>
+Subject: Add the new user to sudo, Debian's administrator group
+
+Debian has no wheel group, so plasma-setup's default (UserGroups=wheel) fails
+with "Unknown group: wheel" when it adds the account it created to its
+groups. Debian's sudoers and polkit treat members of sudo as administrators.
+Forwarded: not-needed
+---
+--- a/files/plasmasetuprc
++++ b/files/plasmasetuprc
+@@ -13,10 +13,10 @@
+ 
+ [Accounts]
+ # Additional groups (comma-separated) that the user created by Plasma
+-# Setup should join. The default is "wheel" so the user has administrative
+-# privileges.
++# Setup should join. Debian's administrator group is "sudo", so the user has
++# administrative privileges.
+ #
+ # Example: UserGroups=wheel,lp,kvm
+ #
+ # NOTE: Leaving this key empty results in the hard-coded default of "wheel".
+-UserGroups=wheel
++UserGroups=sudo

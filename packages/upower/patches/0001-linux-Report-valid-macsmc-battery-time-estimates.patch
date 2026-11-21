@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ryan Murray <ryan@aurorasilicon.org>
+Date: Mon, 12 Oct 2026 02:15:17 +1100
+Subject: [PATCH] linux: Report valid macsmc battery time estimates
+
+The macsmc power supply publishes time estimates in seconds, including when its instantaneous energy rate is zero. Keep positive kernel estimates for the matching charging or discharging state, with the existing rate-based estimate as fallback. Other supply drivers and battery state, charge thresholds and persistence remain unchanged.
+
+Assisted-by: LLM
+Signed-off-by: Ryan Murray <ryan@aurorasilicon.org>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/linux/integration-test.py        | 55 ++++++++++++++++++++++++++++
+ src/linux/up-device-supply-battery.c | 17 +++++++++
+ src/up-device-battery.c              |  6 +++
+ src/up-device-battery.h              |  2 +
+ 4 files changed, 80 insertions(+)
+
+diff --git a/src/linux/integration-test.py b/src/linux/integration-test.py
+index 1db54597..6417a9b3 100755
+--- a/src/linux/integration-test.py
++++ b/src/linux/integration-test.py
+@@ -2955,6 +2955,61 @@ class Tests(dbusmock.DBusTestCase):
+ 
+         self.stop_daemon()
+ 
++    def add_kernel_time_battery(self, name="macsmc-battery", status="Discharging",
++                                empty="3600", full="0", power="0"):
++        attrs = ["type", "Battery", "present", "1", "model_name", "synthetic",
++                 "status", status, "energy_full", "40000000", "energy_full_design", "40000000",
++                 "energy_now", "32000000", "voltage_now", "12000000", "capacity", "80",
++                 "power_now", power, "current_now", "0"]
++        if empty is not None:
++            attrs += ["time_to_empty_now", empty]
++        if full is not None:
++            attrs += ["time_to_full_now", full]
++        self.testbed.add_device("power_supply", name, None, attrs, [])
++        self.start_daemon()
++        devices = self.proxy.EnumerateDevices()
++        self.assertEqual(len(devices), 1)
++        return devices[0]
++
++    def test_macsmc_kernel_time_at_zero_rate(self):
++        device = self.add_kernel_time_battery()
++        self.assertEqual(self.get_dbus_dev_property(device, "State"), UP_DEVICE_STATE_DISCHARGING)
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToEmpty"), 3600)
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToFull"), 0)
++
++    def test_macsmc_kernel_time_charging(self):
++        device = self.add_kernel_time_battery(status="Charging", empty="3600", full="1800")
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToFull"), 1800)
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToEmpty"), 0)
++
++    def test_macsmc_kernel_time_invalid_falls_back(self):
++        device = self.add_kernel_time_battery(empty="not-a-number", power="2000000")
++        self.assertGreater(self.get_dbus_dev_property(device, "TimeToEmpty"), 0)
++
++    def test_macsmc_kernel_time_missing_falls_back(self):
++        device = self.add_kernel_time_battery(empty=None, full=None, power="2000000")
++        self.assertGreater(self.get_dbus_dev_property(device, "TimeToEmpty"), 0)
++
++    def test_macsmc_kernel_time_nonpositive_and_overflow(self):
++        device = self.add_kernel_time_battery(empty="3600")
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToEmpty"), 3600)
++        path = "/sys/class/power_supply/macsmc-battery"
++        for value in ("0", "-1", "60garbage", "9223372036854775808"):
++            with self.subTest(value=value):
++                self.testbed.set_attribute(path, "time_to_empty_now", value)
++                self.testbed.uevent(path, "change")
++                time.sleep(0.1)
++                self.assertEqual(self.get_dbus_dev_property(device, "TimeToEmpty"), 0)
++
++    def test_other_supply_ignores_kernel_time(self):
++        device = self.add_kernel_time_battery(name="BAT0")
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToEmpty"), 0)
++
++    def test_macsmc_kernel_time_fully_charged(self):
++        device = self.add_kernel_time_battery(status="Full", empty="3600", full="1800")
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToEmpty"), 0)
++        self.assertEqual(self.get_dbus_dev_property(device, "TimeToFull"), 0)
++
+     def test_battery_zero_power_draw(self):
+         """Battery with zero power draw, e.g. in a dual-battery system"""
+ 
+diff --git a/src/linux/up-device-supply-battery.c b/src/linux/up-device-supply-battery.c
+index d83f32bf..bfe6456a 100644
+--- a/src/linux/up-device-supply-battery.c
++++ b/src/linux/up-device-supply-battery.c
+@@ -390,6 +390,18 @@ up_device_supply_battery_is_charge_threshold_by_charge_type (UpDevice *device) {
+ 	return FALSE;
+ }
+ 
++static gint64
++up_device_supply_battery_read_kernel_time (GUdevDevice *native, const gchar *attribute)
++{
++	g_autofree gchar *text = get_sysfs_attr_uncached (native, attribute);
++	gint64 seconds;
++
++	if (!text || !g_ascii_string_to_signed (g_strstrip (text), 10, 1, G_MAXINT64, &seconds, NULL))
++		return 0;
++
++	return seconds;
++}
++
+ static gboolean
+ up_device_supply_battery_refresh (UpDevice *device,
+ 				  UpRefreshReason reason)
+@@ -543,6 +555,11 @@ up_device_supply_battery_refresh (UpDevice *device,
+ 	    g_udev_device_get_sysfs_attr_as_double_uncached (native, "current_now") < 0.0)
+ 		values.state = UP_DEVICE_STATE_DISCHARGING;
+ 
++	if (g_strcmp0 (g_udev_device_get_name (native), "macsmc-battery") == 0) {
++		values.kernel_time_to_empty = up_device_supply_battery_read_kernel_time (native, "time_to_empty_now");
++		values.kernel_time_to_full = up_device_supply_battery_read_kernel_time (native, "time_to_full_now");
++	}
++
+ 	values.temperature = g_udev_device_get_sysfs_attr_as_double_uncached (native, "temp") / 10.0;
+ 
+ 	up_device_battery_report (battery, &values, reason);
+diff --git a/src/up-device-battery.c b/src/up-device-battery.c
+index 8da7fb54..56beff43 100644
+--- a/src/up-device-battery.c
++++ b/src/up-device-battery.c
+@@ -395,6 +395,12 @@ up_device_battery_report (UpDeviceBattery *self,
+ 	if (values->state == UP_DEVICE_STATE_PENDING_CHARGE && values->percentage >= UP_FULLY_CHARGED_THRESHOLD)
+ 		values->state = UP_DEVICE_STATE_FULLY_CHARGED;
+ 
++	/* Kernel estimates remain useful when instantaneous power is unavailable. */
++	if (values->state == UP_DEVICE_STATE_DISCHARGING && values->kernel_time_to_empty > 0)
++		time_to_empty = values->kernel_time_to_empty;
++	if (values->state == UP_DEVICE_STATE_CHARGING && values->kernel_time_to_full > 0)
++		time_to_full = values->kernel_time_to_full;
++
+ 	/* Set the main properties (setting "update-time" last) */
+ 	g_object_set (self,
+ 		      "energy", values->energy.cur,
+diff --git a/src/up-device-battery.h b/src/up-device-battery.h
+index dd745103..b1f78fde 100644
+--- a/src/up-device-battery.h
++++ b/src/up-device-battery.h
+@@ -65,6 +65,8 @@ typedef struct {
+ 	gdouble voltage;
+ 	gdouble temperature;
+ 	gchar *capacity_level;
++	gint64 kernel_time_to_empty;
++	gint64 kernel_time_to_full;
+ } UpBatteryValues;
+ 
+ typedef struct {

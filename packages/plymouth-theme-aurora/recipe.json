@@ -1,0 +1,8 @@
+{
+  "source": "plymouth-theme-aurora",
+  "version": "1",
+  "kind": "native",
+  "changes": "Aurora's boot splash: aura's logo kept where the bootloader drew it, the spinner and the distribution's branding below, prepared on each boot from the live device tree (alarm-aurora's theme), with fedora-aurora's dracut module for the initramfs.",
+  "alarm": ["plymouth-theme-aurora"],
+  "notes": "The theme, logos, helper, unit drop-in and geometry test are alarm-aurora's, byte for byte. Debian builds its initramfs with dracut, so the mkinitcpio hook and configuration become fedora-aurora's dracut module (96aurora-plymouth); there is no initramfs-tools hook. The maintainer scripts make the same theme and DeviceScale=1 choices as alarm-aurora's install script; the initramfs is rebuilt through Debian's update-initramfs trigger."
+}

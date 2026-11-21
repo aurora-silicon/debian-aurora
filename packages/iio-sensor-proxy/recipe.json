@@ -1,0 +1,8 @@
+{
+  "source": "iio-sensor-proxy",
+  "version": "3.9-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "iio-sensor-proxy", "version": "3.9-1"},
+  "changes": "Report the light sensor's correlated colour temperature as the ColorTemperature property (the same patch as alarm-aurora and fedora-aurora).",
+  "alarm": ["iio-sensor-proxy-aurora"]
+}

@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+conf=/etc/plymouth/plymouthd.conf
+mark='# Set by plymouth-theme-aurora, which draws in device pixels'
+
+if [ "$1" = configure ] && command -v plymouth-set-default-theme >/dev/null; then
+    # Make Aurora the splash unless the owner already chose a theme.
+    if ! grep -qs '^[[:space:]]*Theme[[:space:]]*=' "$conf"; then
+        plymouth-set-default-theme aurora
+    fi
+    # The theme draws in device pixels, so the logo matches aura's to the
+    # pixel; Plymouth's own 2x scale on Retina panels would double it. An
+    # owner's own DeviceScale wins.
+    if [ "$(plymouth-set-default-theme 2>/dev/null)" = aurora ] &&
+       ! grep -qs '^[[:space:]]*DeviceScale[[:space:]]*=' "$conf"; then
+        sed -i "/^[[:space:]]*\[Daemon\][[:space:]]*\$/a $mark\nDeviceScale=1" "$conf"
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0

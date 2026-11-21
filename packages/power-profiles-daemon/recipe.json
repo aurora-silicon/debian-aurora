@@ -1,0 +1,10 @@
+{
+  "source": "power-profiles-daemon",
+  "version": "0.30-2+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "power-profiles-daemon", "version": "0.30-2"},
+  "changes": "platform_profile driver: when /sys/firmware/acpi/platform_profile is missing (a device tree boot, as on Apple silicon Macs), drive the first /sys/class/platform-profile device instead (the same patch as alarm-aurora).",
+  "cross": false,
+  "alarm": ["power-profiles-daemon"],
+  "notes": "Built emulated, not cross: Debian's Build-Depends name python3 and python3-gi without :native, so a cross build root cannot install them next to dh-python. The patch applies with line offsets only; its integration test runs in the emulated build."
+}

@@ -1,0 +1,52 @@
+Source: plasma-setup
+Section: kde
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Build-Depends: debhelper-compat (= 13),
+               dh-sequence-kf6,
+               dh-sequence-installsysusers,
+               cmake (>= 3.20~),
+               extra-cmake-modules (>= 6.26.0~),
+               gettext,
+               libkf6auth-dev (>= 6.26.0~),
+               libkf6config-dev (>= 6.26.0~),
+               libkf6coreaddons-dev (>= 6.26.0~),
+               libkf6i18n-dev (>= 6.26.0~),
+               libkf6package-dev (>= 6.26.0~),
+               libkscreen-dev (>= 4:6.7.0~),
+               pkgconf,
+               plasma-desktop (>= 4:6.7.0~),
+               plasma-workspace-dev (>= 4:6.7.0~),
+               qt6-base-dev (>= 6.10.0~),
+               qt6-declarative-dev (>= 6.10.0~),
+               qt6-svg-dev (>= 6.10.0~)
+Standards-Version: 4.7.2
+Homepage: https://invent.kde.org/plasma/plasma-setup
+Rules-Requires-Root: no
+
+Package: plasma-setup
+Architecture: arm64
+Depends: passwd,
+         plasma-desktop,
+         plasma-nm,
+         polkitd,
+         qml6-module-org-kde-kirigami,
+         qml6-module-org-kde-kirigamiaddons-components,
+         qml6-module-org-kde-kirigamiaddons-formcard,
+         qml6-module-org-kde-kitemmodels,
+         qml6-module-org-kde-plasma-workspace,
+         qml6-module-qtcore,
+         qml6-module-qtquick,
+         qml6-module-qtquick-controls,
+         qml6-module-qtquick-layouts,
+         qml6-module-qtquick-window,
+         systemd,
+         ${misc:Depends},
+         ${shlibs:Depends}
+Description: first-run setup wizard for KDE Plasma
+ Plasma Setup greets the owner at the first boot of a new KDE Plasma system,
+ before the login manager, and creates the first user account. It also sets
+ the language, keyboard layout, time zone and network.
+ .
+ The wizard runs as the plasma-setup system user when plasma-setup.service is
+ enabled and /etc/plasma-setup-done does not exist yet.

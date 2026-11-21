@@ -1,0 +1,13 @@
+--- a/debian/control
++++ b/debian/control
+@@ -83,8 +83,8 @@
+                meson (>= 1.5.0),
+                pipewire <!nocheck>,
+                pkgconf,
+-               python3,
+-               python3-argcomplete,
++               python3:native,
++               python3-argcomplete:native,
+                python3-dbus <!nocheck>,
+                python3-dbusmock,
+                python3-docutils,

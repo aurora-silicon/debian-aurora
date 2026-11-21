@@ -1,0 +1,2 @@
+# The splash runs from the initramfs, which holds its own copy of the theme.
+activate-noawait update-initramfs

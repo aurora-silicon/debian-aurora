@@ -1,0 +1,9 @@
+{
+  "source": "upower",
+  "version": "1.91.5-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "upower", "version": "1.91.5-1"},
+  "changes": "Report the macsmc battery's own time estimates, including at a zero instantaneous rate, with the rate-based estimate as fallback (aurora-silicon/upower).\nUpstream bb7af5f1 and a6d72c77: expose the composite KbdBacklight object only while a keyboard backlight device is present.\nUpstream c2e6e110: destroy the keyboard backlight I/O watch before closing its fd.\nHand a charge limit saved by asahi-scripts' macsmc-battery units to UPower once, before upowerd starts (upower-charge-limit-migrate, as alarm-aurora and fedora-aurora ship it).",
+  "alarm": ["upower-aurora"],
+  "notes": "patches/ is aurora-silicon/upower d8a24ffc (the sources.json pin) against upstream v1.91.5, one patch per commit with the merges and the GitHub workflow left out; the patched tree is identical to the pinned commit. packaging.patch adds the migration helper and its unit, pulled in by a static upower.service.wants link as on alarm-aurora. Debian's binary package names are kept."
+}

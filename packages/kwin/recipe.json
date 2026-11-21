@@ -1,0 +1,9 @@
+{
+  "source": "kwin",
+  "version": "4:6.7.4-2+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "kwin", "version": "4:6.7.4-2"},
+  "changes": "Night Light: an opt-in ambient white point that follows the ambient light sensor's colour temperature (iio-sensor-proxy's ColorTemperature), the same patch as alarm-aurora's kwin-aurora and fedora-aurora's kwin.",
+  "alarm": ["kwin-aurora"],
+  "notes": "alarm-aurora also carries upstream c9d72079 (no crash on a scanout device without a render device). It fixes a regression from 6783f9610c, which moved the cross-GPU direct scanout check into the compositor in 6.8; 6.7.4 still checks in backends/drm/drm_egl_layer.cpp with the null check, so the fix is not needed here."
+}

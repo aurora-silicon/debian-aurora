@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+
+THEME := debian/plymouth-theme-aurora/usr/share/plymouth/themes/aurora
+DRACUT := debian/plymouth-theme-aurora/usr/lib/dracut/modules.d/96aurora-plymouth
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	install -Dm644 aurora.plymouth $(THEME)/aurora.plymouth
+	install -Dm644 aurora.script $(THEME)/aurora.script
+	# Byte-identical to aura's data/aurora_128.png and aurora_256.png.
+	install -Dm644 aurora-logo-128.png $(THEME)/aurora-logo-128.png
+	install -Dm644 aurora-logo-256.png $(THEME)/aurora-logo-256.png
+	install -Dm755 aurora-plymouth debian/plymouth-theme-aurora/usr/libexec/aurora-plymouth
+	install -Dm644 aurora-plymouth.conf \
+	  debian/plymouth-theme-aurora/usr/lib/systemd/system/plymouth-start.service.d/aurora-plymouth.conf
+	install -Dm755 dracut/module-setup.sh $(DRACUT)/module-setup.sh
+	install -Dm755 dracut/prepare.sh $(DRACUT)/prepare.sh
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	python3 test_geometry.py .
+endif

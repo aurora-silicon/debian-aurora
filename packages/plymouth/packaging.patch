@@ -1,0 +1,10 @@
+--- a/debian/control
++++ b/debian/control
+@@ -38,6 +38,7 @@
+         plymouth-themes (<< 0.9.0-8~)
+ Replaces: plymouth-drm (<< 0.9.0-6~), plymouth-themes (<< 0.9.0-8~)
+ Suggests: desktop-base, plymouth-themes
++Provides: plymouth-script-keyboard-lifetime (= 1)
+ Description: boot animation, logger and I/O multiplexer
+  Plymouth provides a boot-time I/O multiplexing framework - the most obvious
+  use for which is to provide an attractive graphical animation in place of

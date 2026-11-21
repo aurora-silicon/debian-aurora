@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+conf=/etc/plymouth/plymouthd.conf
+mark='# Set by plymouth-theme-aurora, which draws in device pixels'
+
+if [ "$1" = remove ]; then
+    sed -i "/^$mark\$/{N;/\nDeviceScale=1\$/d}" "$conf" 2>/dev/null || true
+    if command -v plymouth-set-default-theme >/dev/null &&
+       [ "$(plymouth-set-default-theme 2>/dev/null)" = aurora ]; then
+        plymouth-set-default-theme --reset || true
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0

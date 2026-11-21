@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DBUILD_TESTING=OFF
+
+# The image enables the wizard; installing or upgrading the package must never
+# start it.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start

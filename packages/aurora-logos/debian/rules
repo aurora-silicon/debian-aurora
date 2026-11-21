@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+SIZES := 16 22 24 32 48 64 96 128 256 512
+ICONS := debian/aurora-logos/usr/share/icons/hicolor
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	for size in $(SIZES); do \
+	  install -Dm644 AuroraLogo-$$size.png $(ICONS)/$${size}x$${size}/apps/aurora-logo-icon.png || exit 1; \
+	  install -Dm644 AuroraLogo-$$size.png $(ICONS)/$${size}x$${size}/places/start-here.png || exit 1; \
+	done
+	install -Dm644 AuroraLogo-256.png debian/aurora-logos/usr/share/pixmaps/system-logo-white.png
+	install -Dm644 kcm-about-distrorc debian/aurora-logos/etc/xdg/kcm-about-distrorc
+	install -Dm644 provenance.json debian/aurora-logos/usr/share/doc/aurora-logos/provenance.json

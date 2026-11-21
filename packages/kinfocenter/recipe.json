@@ -1,0 +1,8 @@
+{
+  "source": "kinfocenter",
+  "version": "4:6.7.4-1+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "kinfocenter", "version": "4:6.7.4-1"},
+  "changes": "About this System: treat installed memory as unknown when the DMI memory devices report missing or invalid sizes, instead of showing a wrong or zero total (the same patch as alarm-aurora and fedora-aurora).",
+  "alarm": ["kinfocenter"]
+}

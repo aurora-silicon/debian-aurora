@@ -1,0 +1,22 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: plasma-setup
+Source: https://download.kde.org/stable/plasma/
+
+Files: *
+Copyright: Kristen McWilliam <kristen@kde.org>
+           Devin Lin <devin@kde.org>
+           Carl Schwan <carl@carlschwan.eu>
+           Martin Kacej <m.kacej@atlas.sk>
+           Janet Blackquill <uhhadd@gmail.com>
+           Jan Grulich <jgrulich@redhat.com>
+           Evgeny Chesnokov <echesnokov@astralinux.ru>
+License: GPL-2.0-or-later and GPL-3.0-or-later and LGPL-2.0-or-later and LGPL-2.1-or-later and LGPL-2.1-only or LGPL-3.0-only or LicenseRef-KDE-Accepted-LGPL and BSD-2-Clause and CC0-1.0
+ Each file names its licence with an SPDX identifier; the full texts are in
+ the source's LICENSES directory. On Debian systems the GPL and LGPL texts are
+ in /usr/share/common-licenses. LicenseRef-KDE-Accepted-LGPL lets KDE e.V.
+ accept later versions of the LGPL for the files under it.
+
+Files: debian/*
+Copyright: Aurora Silicon
+License: GPL-2.0-or-later
+ On Debian systems the full text is in /usr/share/common-licenses/GPL-2.

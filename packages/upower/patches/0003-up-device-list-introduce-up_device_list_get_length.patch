@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kate Hsuan <hpa@redhat.com>
+Date: Wed, 7 Oct 2026 16:30:49 +0800
+Subject: [PATCH] up-device-list: introduce up_device_list_get_length()
+
+Return the length of the device list.
+
+(cherry picked from commit a6d72c77115db1cea0f09f3ce19ae05371cebe1a)
+---
+ src/up-device-list.c | 15 +++++++++++++++
+ src/up-device-list.h |  1 +
+ 2 files changed, 16 insertions(+)
+
+diff --git a/src/up-device-list.c b/src/up-device-list.c
+index 216719d0..90a498d0 100644
+--- a/src/up-device-list.c
++++ b/src/up-device-list.c
+@@ -164,6 +164,21 @@ up_device_list_get_array (UpDeviceList *list)
+ 	return g_ptr_array_ref (list->priv->array);
+ }
+ 
++/**
++ * up_device_list_get_length:
++ * @list: This class instance
++ *
++ * Get the number of devices in the list.
++ *
++ * Return value: the number of devices in the list.
++ */
++gsize
++up_device_list_get_length (UpDeviceList *list)
++{
++	g_return_val_if_fail (UP_IS_DEVICE_LIST (list), 0);
++	return list->priv->array->len;
++}
++
+ /**
+  * up_device_list_class_init:
+  * @klass: The UpDeviceListClass
+diff --git a/src/up-device-list.h b/src/up-device-list.h
+index 29c144d0..4e8cba10 100644
+--- a/src/up-device-list.h
++++ b/src/up-device-list.h
+@@ -53,6 +53,7 @@ typedef struct
+ GType		 up_device_list_get_type		(void);
+ UpDeviceList	*up_device_list_new			(void);
+ 
++gsize		 up_device_list_get_length		(UpDeviceList		*list);
+ GObject		*up_device_list_lookup			(UpDeviceList		*list,
+ 							 GObject		*native);
+ gboolean	 up_device_list_insert			(UpDeviceList		*list,
