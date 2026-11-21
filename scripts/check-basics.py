@@ -1,0 +1,575 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+"""Fail an Aurora Debian image build that lacks the basics every image must have.
+
+Checked against the finished root (and, with --esp, the EFI and boot
+filesystems the installer writes). These are alarm-aurora's checks, read
+with Debian's file names:
+
+  locale     a UTF-8 default (/etc/default/locale and /etc/locale.conf)
+             that is actually generated
+  GL         factory images leave Mesa driver selection automatic
+  terminal   desktops ship their terminal and its launcher
+  wallpaper  GNOME's backgrounds and default picture; Plasma's wallpapers
+  logos      Aurora's icons and About logo are present and valid
+  network    NetworkManager is enabled; desktops ship its settings UI
+  lid        logind still suspends on lid close; sleep is not masked
+  touchid    sudo (sudo and sudo-i), polkit and the lock screen offer a
+             fingerprint, and sudo and polkit still reach the password; the
+             login screen, the console login, su and ssh ask for the
+             password; a short press of the power button suspends or is
+             explicitly ignored
+  ssh        no ssh unit is enabled; remote login is the owner's choice
+  units      no unit file or drop-in is executable (systemd warns every boot)
+  greeter    KDE signs in with Plasma Login, whose greeter runs on KWin
+             Wayland at the display's scale (SDDM's Xorg greeter drew at 1x)
+  boot       GRUB finds /boot by filesystem UUID on the startup disk only:
+             no partition number in the core, no lookup without a hint
+"""
+import argparse
+import os
+from pathlib import Path, PurePosixPath
+import re
+import subprocess
+import sys
+
+PREAMBLE = 'Aurora: look for this installation only on the disk GRUB started from.'
+IMAGE_SUFFIXES = ('.jpg', '.jpeg', '.png', '.jxl', '.svg', '.webp', '.avif')
+TERMINALS = {
+    'gnome': [('kgx', 'org.gnome.Console.desktop'), ('gnome-terminal', 'org.gnome.Terminal.desktop'),
+              ('ptyxis', 'org.gnome.Ptyxis.desktop')],
+    'kde': [('konsole', 'org.kde.konsole.desktop')],
+}
+# Sessions read /etc/default/locale (pam_env); systemd reads /etc/locale.conf.
+LOCALE_FILES = ('/etc/default/locale', '/etc/locale.conf')
+
+
+class Root:
+    """Paths inside an image root; absolute symbolic links stay inside it."""
+
+    def __init__(self, root):
+        self.root = Path(root)
+
+    def path(self, name, depth=0):
+        if depth > 40:
+            raise RuntimeError(f'too many symbolic links: {name}')
+        current = self.root
+        parts = PurePosixPath(name).parts[1:]
+        for index, part in enumerate(parts):
+            candidate = current / part
+            if candidate.is_symlink():
+                target = os.readlink(candidate)
+                rest = '/'.join(parts[index + 1:])
+                if target.startswith('/'):
+                    joined = target + ('/' + rest if rest else '')
+                else:
+                    inside = '/' + str(current.relative_to(self.root)) if current != self.root else ''
+                    joined = os.path.normpath(f'{inside}/{target}') + ('/' + rest if rest else '')
+                return self.path(joined, depth + 1)
+            current = candidate
+        return current
+
+    def text(self, name):
+        path = self.path(name)
+        return path.read_text(errors='replace') if path.is_file() else None
+
+
+def normalize_locale(name):
+    language, _, codeset = name.partition('.')
+    codeset, _, modifier = codeset.partition('@')
+    codeset = re.sub(r'[^0-9a-z]', '', codeset.lower())
+    return f'{language}.{codeset}' + (f'@{modifier}' if modifier else '')
+
+
+def assignments(text):
+    values = {}
+    for line in (text or '').splitlines():
+        line = line.strip()
+        if line.startswith('export '):
+            line = line[7:]
+        if '=' in line and not line.startswith('#'):
+            key, _, value = line.partition('=')
+            values[key.strip()] = value.strip().strip('"\'')
+    return values
+
+
+def check_gl_selection(root):
+    """Factory images leave GL selection to Mesa; fallback is per application."""
+    files = ['/etc/environment']
+    for directory in ('/etc/environment.d', '/usr/lib/environment.d'):
+        path = root.path(directory)
+        if path.is_dir():
+            files.extend(f'{directory}/{p.name}' for p in sorted(path.glob('*.conf')))
+    for file in files:
+        for line in (root.text(file) or '').splitlines():
+            values = assignments(line)
+            for key in ('MESA_LOADER_DRIVER_OVERRIDE', 'GALLIUM_DRIVER'):
+                if values.get(key):
+                    return f'global {key} in {file}; leave factory GL selection automatic'
+    return None
+
+
+def locale_generated(root, lang):
+    name = normalize_locale(lang)
+    if name == 'C.utf8' or root.path(f'/usr/lib/locale/{name}/LC_CTYPE').is_file():
+        return True
+    # locale-gen compiles Debian's locales into the archive.
+    archive = root.path('/usr/lib/locale/locale-archive')
+    return archive.is_file() and (name.encode() + b'\0') in archive.read_bytes()
+
+
+def check_locale(root):
+    for file in LOCALE_FILES:
+        lang = assignments(root.text(file)).get('LANG', '')
+        if not re.search(r'\.(utf-?8)(@|$)', lang, re.IGNORECASE):
+            return f'no UTF-8 default locale: {file} has LANG={lang or "(unset)"}'
+        if not locale_generated(root, lang):
+            return f'the default locale {lang} ({file}) is not generated'
+    return None
+
+
+def check_terminal(root, profile):
+    for binary, launcher in TERMINALS[profile]:
+        if (root.path(f'/usr/bin/{binary}').exists()
+                and root.path(f'/usr/share/applications/{launcher}').is_file()):
+            return None
+    names = ', '.join(binary for binary, _ in TERMINALS[profile])
+    return f'no terminal with a launcher ({names})'
+
+
+def images(directory):
+    if not directory.is_dir():
+        return []
+    return [path for path in directory.rglob('*') if path.suffix.lower() in IMAGE_SUFFIXES]
+
+
+def gnome_default_picture(root):
+    """The effective org.gnome.desktop.background picture-uri, if it can be read."""
+    schemas = root.path('/usr/share/glib-2.0/schemas')
+    if not schemas.is_dir():
+        return None
+    value = None
+    schema = schemas / 'org.gnome.desktop.background.gschema.xml'
+    if schema.is_file():
+        found = re.search(r'<key name="picture-uri"[^>]*>.*?<default>\s*\'([^\']*)\'', schema.read_text(), re.S)
+        value = found and found[1]
+    # Vendor overrides (Debian's desktop-base has one) apply in file-name
+    # order; later files win.
+    for override in sorted(schemas.glob('*.gschema.override')):
+        section = None
+        for line in override.read_text(errors='replace').splitlines():
+            line = line.strip()
+            if line.startswith('['):
+                section = line.strip('[]').strip()
+            elif section == 'org.gnome.desktop.background' and line.startswith('picture-uri'):
+                found = re.search(r"=\s*'([^']*)'", line)
+                if found:
+                    value = found[1]
+    return value
+
+
+def check_wallpaper(root, profile):
+    if profile == 'gnome':
+        if not images(root.path('/usr/share/backgrounds/gnome')):
+            return "GNOME's backgrounds (gnome-backgrounds) are missing"
+        uri = gnome_default_picture(root)
+        if not uri:
+            return 'the GNOME background schema has no default picture'
+        if uri.startswith('file://') and not root.path(uri[7:]).is_file():
+            return f'the default GNOME background {uri} does not exist'
+    else:
+        wallpapers = root.path('/usr/share/wallpapers')
+        packages = [entry for entry in wallpapers.iterdir() if images(entry / 'contents/images')] \
+            if wallpapers.is_dir() else []
+        # plasma-workspace ships only its default (Next) and a couple more;
+        # plasma-workspace-wallpapers adds two dozen.
+        if len(packages) < 8:
+            return "Plasma's wallpapers (plasma-workspace-wallpapers) are missing"
+    return None
+
+
+def check_network(root, profile):
+    unit = root.path('/etc/systemd/system/multi-user.target.wants') / 'NetworkManager.service'
+    if not (unit.is_symlink() or unit.exists()):
+        return 'NetworkManager.service is not enabled'
+    if profile == 'gnome' and not root.path('/usr/bin/gnome-control-center').exists():
+        return 'GNOME Settings (network and Wi-Fi) is missing'
+    # plasma-nm: its System Settings module, and the panel applet (a plugin
+    # since Plasma 6.8, a package directory before).
+    if profile == 'kde' and not (
+            root.path('/usr/share/applications/kcm_networkmanagement.desktop').is_file()
+            or root.path('/usr/share/plasma/plasmoids/org.kde.plasma.networkmanagement').is_dir()):
+        return "Plasma's network settings (plasma-nm) are missing"
+    return None
+
+
+def logind_files(root):
+    """logind.conf and its drop-ins in the order logind reads them; later settings win.
+
+    The first main file found is the only one read (Debian ships
+    /etc/systemd/logind.conf). Drop-ins sort by name across the directories;
+    one in /etc replaces a vendor drop-in of the same name.
+    """
+    files = []
+    for name in ('/etc/systemd/logind.conf', '/usr/local/lib/systemd/logind.conf', '/usr/lib/systemd/logind.conf'):
+        if root.path(name).is_file():
+            files.append(root.path(name))
+            break
+    dropins = {}
+    for directory in ('/usr/lib/systemd/logind.conf.d', '/usr/local/lib/systemd/logind.conf.d',
+                      '/etc/systemd/logind.conf.d'):
+        path = root.path(directory)
+        if path.is_dir():
+            for item in path.glob('*.conf'):
+                dropins[item.name] = item
+    return files + [dropins[name] for name in sorted(dropins) if dropins[name].is_file()]
+
+
+def check_lid(root):
+    for path in logind_files(root):
+        for line in path.read_text(errors='replace').splitlines():
+            found = re.match(r'\s*HandleLidSwitch\s*=\s*(\S+)', line)
+            if found and found[1] != 'suspend':
+                return f'{path.name} sets HandleLidSwitch={found[1]}'
+    units = root.path('/etc/systemd/system')
+    for unit in ('sleep.target', 'suspend.target', 'systemd-suspend.service', 'systemd-logind.service'):
+        path = units / unit
+        if path.is_symlink() and os.readlink(path) == '/dev/null':
+            return f'{unit} is masked'
+    return None
+
+
+# Debian's OpenSSH units are ssh.service and ssh.socket (sshd.service is an
+# alias); the Arch names stay so a unit of either name is caught.
+SSH_UNITS = ('ssh.service', 'ssh.socket', 'sshd.service', 'sshd.socket')
+
+
+def check_ssh(root):
+    units = root.path('/etc/systemd/system')
+    if not units.is_dir():
+        return None
+    for wants in sorted(units.glob('*.wants')) + sorted(units.glob('*.requires')):
+        for unit in SSH_UNITS:
+            path = wants / unit
+            if path.is_symlink() or path.exists():
+                return f'{unit} is enabled ({wants.name})'
+    return None
+
+
+UNIT_SUFFIXES = ('.service', '.socket', '.target', '.path', '.timer', '.mount', '.automount',
+                 '.swap', '.slice', '.scope', '.device')
+
+
+def check_unit_modes(root):
+    for directory in ('/usr/lib/systemd/system', '/usr/lib/systemd/user',
+                      '/etc/systemd/system', '/etc/systemd/user'):
+        base = root.path(directory)
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob('*')):
+            drop_in = path.suffix == '.conf' and path.parent.name.endswith('.d')
+            if path.is_symlink() or not path.is_file() or not (drop_in or path.suffix in UNIT_SUFFIXES):
+                continue
+            if path.stat().st_mode & 0o111:
+                return f'{directory}/{path.relative_to(base)} is marked executable'
+    return None
+
+
+def check_greeter(root, profile):
+    if profile != 'kde':
+        return None
+    # systemctl enable links the display manager's Alias=, which resolves to
+    # the unit file itself.
+    unit = root.path('/etc/systemd/system/display-manager.service')
+    if not unit.is_file():
+        return 'no display manager is enabled (display-manager.service)'
+    if unit.name != 'plasmalogin.service':
+        return f'the display manager is {unit.name}, not Plasma Login (plasmalogin.service)'
+    return None
+
+
+# Touch ID: where PAM offers a fingerprint, and what the power button does.
+# `sudo -i` authenticates as sudo-i on Debian.
+FINGERPRINT_SERVICES = ('sudo', 'sudo-i', 'polkit-1')
+PASSWORD_SERVICES = ('login', 'su', 'su-l', 'sshd')
+LOCK_SCREENS = {'gnome': ('gdm-fingerprint',), 'kde': ('kde-fingerprint',)}
+# The login screen and the lock screen's password prompt.
+PASSWORD_PROMPTS = {'gnome': ('gdm-password',), 'kde': ('plasmalogin', 'kde')}
+PAM_ACTIONS = {
+    'required': {'success': 'ok', 'default': 'bad'},
+    'requisite': {'success': 'ok', 'default': 'die'},
+    'sufficient': {'success': 'done', 'default': 'ignore'},
+    'optional': {'success': 'ok', 'default': 'ignore'},
+}
+
+
+def pam_auth_rows(text):
+    rows = []
+    for line in text.replace('\\\n', ' ').splitlines():
+        line = line.split('#', 1)[0].strip()
+        if line.startswith('@include'):
+            rows.append(('include', line.split()[1], []))
+            continue
+        found = re.match(r'-?auth\s+(\[[^\]]*\]|\S+)\s+(\S+)\s*(.*)', line)
+        if found:
+            rows.append((found[1], found[2], found[3].split()))
+    return rows
+
+
+def pam_service(root, name):
+    """The text of a PAM service as Linux-PAM finds it: /etc/pam.d, then the vendor directory."""
+    if name.startswith('/'):
+        return root.text(name)
+    for directory in ('/etc/pam.d', '/usr/lib/pam.d'):
+        text = root.text(f'{directory}/{name}')
+        if text is not None:
+            return text
+    return None
+
+
+def pam_entries(root, name, depth=0):
+    text = pam_service(root, name)
+    if text is None or depth > 20:
+        return None
+    entries = []
+    for control, module, args in pam_auth_rows(text):
+        if control == 'include':
+            entries += pam_entries(root, module, depth + 1) or []
+        elif control == 'substack':
+            entries.append(('substack', pam_entries(root, module, depth + 1) or [], []))
+        else:
+            entries.append((control, module, args))
+    return entries
+
+
+def succeed_if_service(args, service):
+    """pam_succeed_if's answer for a test of the service name, else None."""
+    words = [arg for arg in args if arg not in ('quiet', 'quiet_fail', 'quiet_success', 'use_uid', 'debug', 'audit')]
+    if len(words) != 3 or words[0] != 'service':
+        return None
+    op, value = words[1], words[2]
+    return {'in': service in value.split(':'), 'notin': service not in value.split(':'),
+            '=': service == value, '!=': service != value}.get(op)
+
+
+def pam_paths(entries, service):
+    """Every sequence of modules an authentication can run."""
+    paths = []
+
+    def run(index, seen):
+        if index >= len(entries):
+            paths.append(seen)
+            return
+        control, module, args = entries[index]
+        if control == 'substack':
+            for sub in pam_paths(module, service):
+                run(index + 1, seen + sub)
+            return
+        name = os.path.basename(module)
+        outcomes = [True, False]
+        if name == 'pam_succeed_if.so' and succeed_if_service(args, service) is not None:
+            outcomes = [succeed_if_service(args, service)]
+        elif name == 'pam_permit.so':
+            outcomes = [True]
+        elif name in ('pam_deny.so', 'pam_debug.so'):
+            outcomes = [False]
+        actions = PAM_ACTIONS.get(control) or dict(item.split('=', 1) for item in control.strip('[]').split() if '=' in item)
+        for ok in outcomes:
+            action = actions.get('success' if ok else 'default', actions.get('default', 'ignore'))
+            if action in ('done', 'die'):
+                paths.append(seen + (name,))
+            elif action.isdigit():
+                run(index + 1 + int(action), seen + (name,))
+            else:
+                run(index + 1, seen + (name,))
+    run(0, ())
+    return paths
+
+
+def pam_flat(entries):
+    for control, module, args in entries:
+        if control == 'substack':
+            yield from pam_flat(module)
+        else:
+            yield control, module, args
+
+
+def pam_fingerprint(root, service, file=None):
+    """None when the service file is absent, else (fingerprint offered, password after it).
+
+    The password only stays usable when a failed or absent fingerprint moves on:
+    pam_fprintd must be sufficient (or a [...] control that ignores failure).
+    """
+    entries = pam_entries(root, file or service)
+    if entries is None:
+        return None
+    paths = pam_paths(entries, service)
+    offered = [path for path in paths if 'pam_fprintd.so' in path]
+    controls = [control for control, module, _ in pam_flat(entries) if os.path.basename(module) == 'pam_fprintd.so']
+    tolerant = all(control == 'sufficient' or (control.startswith('[') and
+                   dict(item.split('=', 1) for item in control.strip('[]').split() if '=' in item).get('default') == 'ignore')
+                   for control in controls)
+    fallback = tolerant and any('pam_unix.so' in path[path.index('pam_fprintd.so'):] for path in offered)
+    return bool(offered), fallback
+
+
+def config_value(texts, section, key):
+    value = None
+    for text in texts:
+        current = None
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith('['):
+                current = line
+            elif current == section and re.match(rf'{key}\s*=', line):
+                value = line.split('=', 1)[1].strip()
+    return value
+
+
+def logind_texts(root):
+    return [path.read_text(errors='replace') for path in logind_files(root)]
+
+
+def check_touchid(root, profile):
+    problems = []
+    expect = [(name, True) for name in FINGERPRINT_SERVICES + LOCK_SCREENS.get(profile, ())]
+    expect += [(name, False) for name in PASSWORD_SERVICES + PASSWORD_PROMPTS.get(profile, ())]
+    for name, wanted in expect:
+        required = wanted or name == 'login'
+        result = pam_fingerprint(root, name)
+        if result is None and not required:
+            # Linux-PAM runs a service without a file as "other", which on
+            # Debian includes common-auth.
+            result = pam_fingerprint(root, name, 'other')
+        if result is None:
+            if required:
+                problems.append(f'PAM service {name} is missing')
+            continue
+        offered, fallback = result
+        if offered != wanted:
+            problems.append(f'{name} {"does not offer" if wanted else "offers"} a fingerprint')
+        elif wanted and name in FINGERPRINT_SERVICES and not fallback:
+            problems.append(f'{name} has no password after the fingerprint')
+    logind = logind_texts(root)
+    # Ignore lets a compositor own the short press; an absent/empty setting
+    # would fall back to logind's poweroff and must still fail image checks.
+    for key, wanted in (('HandlePowerKey', ('suspend', 'ignore')),
+                        ('HandlePowerKeyLongPress', ('poweroff',))):
+        value = config_value(logind, '[Login]', key)
+        if value not in wanted:
+            problems.append(f'logind {key}={value or "(default)"}, not {" or ".join(wanted)}')
+    if profile == 'kde':
+        texts = [root.text('/etc/xdg/powerdevilrc') or '']
+        for group in ('AC', 'Battery', 'LowBattery'):
+            value = config_value(texts, f'[{group}][SuspendAndShutdown]', 'PowerButtonAction')
+            if value != '1':
+                problems.append(f'Plasma {group} power button action is {value or "the logout screen"}, not suspend')
+    return '; '.join(problems) or None
+
+
+def boot_reader(args):
+    if args.boot_dir:
+        base = Path(args.boot_dir)
+        return lambda name: (base / name).read_bytes() if (base / name).is_file() else None
+
+    def read(name):
+        # debugfs exits 0 either way; a missing file is reported on stderr.
+        result = subprocess.run(['debugfs', '-R', f'cat /{name}', args.boot_image],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0 or b'not found' in result.stderr.lower():
+            return None
+        return result.stdout
+    return read
+
+
+def unhinted_searches(text):
+    return [line.strip() for line in text.splitlines()
+            if re.match(r'\s*search\b', line) and ('--hint' not in line or '--no-floppy' not in line)]
+
+
+def check_boot(args):
+    # aurora-platform's harden-grub.py, arch flavour: Debian's GRUB has
+    # Arch's layout (/boot/grub, EFI/BOOT/BOOTAA64.EFI).
+    esp, uuid = Path(args.esp), args.boot_uuid.lower()
+    read = boot_reader(args)
+    core = esp / 'EFI/BOOT/BOOTAA64.EFI'
+    if not core.is_file():
+        return 'EFI/BOOT/BOOTAA64.EFI is missing'
+    data = core.read_bytes()
+    # grub-install embeds either a partition number or an early
+    # "search.fs_uuid <boot>" that falls back to every disk; Aurora's core
+    # embeds neither and runs EFI/BOOT/grub.cfg instead.
+    if re.search(rb'\((hd\d+)?,gpt\d+\)', data) or uuid.encode() in data.lower():
+        return 'the GRUB core names /boot by partition number or by an all-disk search'
+    if b'/EFI/BOOT' not in data:
+        return 'the GRUB core does not load its configuration from EFI/BOOT'
+    stub = esp / 'EFI/BOOT/grub.cfg'
+    if not stub.is_file():
+        return 'the EFI GRUB stub configuration is missing'
+    text = stub.read_text()
+    if PREAMBLE not in text or uuid not in text.lower():
+        return f'{stub.relative_to(esp)} does not find /boot ({uuid}) by UUID on the startup disk'
+    if unhinted_searches(text):
+        return f'{stub.relative_to(esp)} has a lookup without a hint: {unhinted_searches(text)[0]}'
+    main = read('grub/grub.cfg')
+    if main is None:
+        return '/boot/grub/grub.cfg is missing'
+    if unhinted_searches(main.decode(errors='replace')):
+        return f'/boot/grub/grub.cfg has a lookup without a hint: {unhinted_searches(main.decode())[0]}'
+    return None
+
+
+def check_logos(root):
+    # Catch an absent or corrupt payload before publishing an image.
+    for size in (16, 22, 24, 32, 48, 64, 96, 128, 256, 512):
+        for directory, name in (('apps', 'aurora-logo-icon'), ('places', 'start-here')):
+            path = root.path(f'/usr/share/icons/hicolor/{size}x{size}/{directory}/{name}.png')
+            if not path.is_file() or path.read_bytes()[:8] != b'\x89PNG\r\n\x1a\n':
+                return f'missing or invalid Aurora icon: {name} ({size}px)'
+    path = root.path('/usr/share/pixmaps/system-logo-white.png')
+    if not path.is_file() or path.read_bytes()[:8] != b'\x89PNG\r\n\x1a\n':
+        return 'missing or invalid Aurora About logo'
+    return None
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--profile', required=True, choices=['kde', 'gnome', 'minimal'])
+    parser.add_argument('--root', help='the finished image root')
+    parser.add_argument('--esp', help='the EFI partition contents')
+    parser.add_argument('--boot-dir', help='the /boot filesystem contents')
+    parser.add_argument('--boot-image', help='the /boot filesystem image (ext4)')
+    parser.add_argument('--boot-uuid', help='the /boot filesystem UUID')
+    args = parser.parse_args()
+    if not args.root and not args.esp:
+        parser.error('nothing to check: give --root, --esp or both')
+    if args.esp and not (args.boot_uuid and (args.boot_dir or args.boot_image)):
+        parser.error('--esp needs --boot-uuid and --boot-dir or --boot-image')
+    checks = []
+    if args.root:
+        root = Root(args.root)
+        checks.append(('locale', check_locale(root)))
+        checks.append(('gl-selection', check_gl_selection(root)))
+        if args.profile != 'minimal':
+            checks.append(('terminal', check_terminal(root, args.profile)))
+            checks.append(('wallpaper', check_wallpaper(root, args.profile)))
+            checks.append(('logos', check_logos(root)))
+        checks.append(('network', check_network(root, args.profile)))
+        checks.append(('lid', check_lid(root)))
+        checks.append(('touchid', check_touchid(root, args.profile)))
+        checks.append(('ssh', check_ssh(root)))
+        checks.append(('units', check_unit_modes(root)))
+        checks.append(('greeter', check_greeter(root, args.profile)))
+    if args.esp:
+        checks.append(('boot', check_boot(args)))
+    failures = [(name, problem) for name, problem in checks if problem]
+    for name, problem in checks:
+        print(f'aurora basics: {name}: {"FAIL: " + problem if problem else "ok"}')
+    if failures:
+        print('aurora basics: this image is missing basics every Aurora image must have', file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
