@@ -1,0 +1,8 @@
+{
+  "source": "avd-fw",
+  "version": "0.1.aurora4-1",
+  "kind": "upstream",
+  "upstream": {"pin": "avd-fw"},
+  "changes": "Open replacement firmware for the Apple Video Decoder (AVD) generations v2 to v5, built from aurora-silicon/avd-fw at ea8ae7c8 with clang 22, as alarm-aurora builds it; the build checks every image against the shared clang 22 hash manifest.",
+  "alarm": ["avd-fw"]
+}

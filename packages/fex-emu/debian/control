@@ -1,0 +1,70 @@
+Source: fex-emu
+Section: otherosfs
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Standards-Version: 4.7.2
+Build-Depends:
+ debhelper-compat (= 13),
+ clang:native,
+ cmake,
+ libxxhash-dev,
+ lld:native,
+ llvm:native,
+ ninja-build,
+ pkgconf,
+ python3:native,
+ python3-packaging,
+ python3-setuptools,
+ qt6-base-dev <!cross>,
+ qt6-declarative-dev <!cross>
+Rules-Requires-Root: no
+Homepage: https://github.com/aurora-silicon/fex
+
+Package: fex-emu
+Architecture: arm64
+Depends:
+ erofsfuse,
+ fuse3,
+ squashfuse,
+ util-linux,
+ ${misc:Depends},
+ ${shlibs:Depends}
+Recommends:
+ aurora-userpages,
+ erofs-utils,
+ mesa-aurora-fex-guest,
+ squashfs-tools
+Suggests: fex-emu-config
+Description: fast usermode x86 and x86-64 emulator for ARM64 (Aurora build)
+ FEX runs x86 and x86-64 Linux programs on an AArch64 host. This build comes
+ from Aurora's fork. It uses the hardware TSO memory model when the kernel
+ offers it, keeps the x86 parity and adjust flags in hardware on Apple cores,
+ and runs in the 4 KiB page process trees that Aurora kernels provide (see
+ README.aurora).
+ .
+ x86 programs need an x86-64 root filesystem; FEXRootFSFetcher downloads
+ one.
+
+Package: fex-emu-config
+Architecture: arm64
+Build-Profiles: <!cross>
+Depends:
+ fex-emu (= ${binary:Version}),
+ qml6-module-qtquick,
+ qml6-module-qtquick-controls,
+ qml6-module-qtquick-dialogs,
+ qml6-module-qtquick-layouts,
+ ${misc:Depends},
+ ${shlibs:Depends}
+Description: graphical configuration editor for FEX (Aurora build)
+ FEXConfig edits a user's FEX configuration: the root filesystem, per-app
+ settings and emulation options.
+
+Package: fex-emu-steam
+Architecture: arm64
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: FEX as a Steam compatibility tool, "FEX (Aurora)"
+ FEX from Aurora's fork, built as a Steam compatibility tool (the fork's
+ FEXCompatTool and FEXServerManager). Steam's native ARM64 client lists it
+ as "FEX (Aurora)" and can run x86 Linux titles with it instead of Valve's
+ FEX tool.

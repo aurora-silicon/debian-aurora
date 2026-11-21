@@ -1,0 +1,279 @@
+Source: mesa
+Section: graphics
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Standards-Version: 4.7.2
+Build-Depends:
+ debhelper-compat (= 13),
+ bindgen (>= 0.71~) <!cross>,
+ bison,
+ flex,
+ glslang-tools,
+ libclang-21-dev:native,
+ libclang-cpp21-dev:native,
+ libclc-21 <!cross>,
+ libclc-21-dev <!cross>,
+ libdisplay-info-dev,
+ libdrm-dev (>= 2.4.134-3~),
+ libexpat1-dev,
+ libglvnd-core-dev (>= 1.3.2),
+ libllvmspirvlib-21-dev:native,
+ libpng-dev,
+ libsensors-dev,
+ libstd-rust-dev (>= 1.85) <!cross>,
+ libudev-dev,
+ libvulkan-dev,
+ libwayland-dev (>= 1.15.0),
+ libwayland-egl-backend-dev (>= 1.15.0),
+ libx11-dev (>= 1.8),
+ libx11-xcb-dev,
+ libxcb-dri2-0-dev (>= 1.8),
+ libxcb-dri3-dev,
+ libxcb-glx0-dev (>= 1.8.1),
+ libxcb-keysyms1-dev,
+ libxcb-present-dev,
+ libxcb-randr0-dev,
+ libxcb-shm0-dev,
+ libxcb-sync-dev,
+ libxcb-xfixes0-dev,
+ libxext-dev,
+ libxfixes-dev,
+ libxml2-utils:native <!nocheck>,
+ libxrandr-dev,
+ libxshmfence-dev (>= 1.1),
+ libxxf86vm-dev,
+ libzstd-dev,
+ linux-libc-dev,
+ llvm-21-dev:native,
+ meson (>= 1.7.0),
+ pkgconf,
+ python3:native,
+ python3-mako:native,
+ python3-packaging,
+ python3-setuptools,
+ python3-yaml:native,
+ rustc (>= 1.85) <!cross>,
+ rustfmt <!cross>,
+ spirv-tools-dev:native (>= 2025.1~rc1),
+ wayland-protocols (>= 1.41),
+ x11proto-dev,
+ zlib1g-dev
+Rules-Requires-Root: no
+Homepage: https://github.com/aurora-silicon/mesa
+
+Package: libgbm1
+Section: libs
+Architecture: arm64
+Depends:
+ mesa-libgallium (= ${binary:Version}),
+ ${misc:Depends},
+ ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: generic buffer management API -- runtime
+ This package contains the GBM buffer management library.  It provides a
+ mechanism for allocating buffers for graphics rendering tied to Mesa.
+ .
+ GBM is intended to be used as a native platform for EGL on drm or openwfd.
+ .
+ This is Aurora's Mesa for Apple Silicon.
+
+Package: libgbm-dev
+Section: libdevel
+Architecture: arm64
+Depends: libgbm1 (= ${binary:Version}), ${misc:Depends}
+Multi-Arch: same
+Description: generic buffer management API -- development files
+ This package contains the GBM buffer management library.  It provides a
+ mechanism for allocating buffers for graphics rendering tied to Mesa.
+ .
+ GBM is intended to be used as a native platform for EGL on drm or openwfd.
+ .
+ This package provides the development environment for compiling programs
+ against the GBM library.
+
+Package: libegl-mesa0
+Section: libs
+Architecture: arm64
+Depends:
+ libgbm1 (= ${binary:Version}),
+ mesa-libgallium (= ${binary:Version}),
+ ${misc:Depends},
+ ${shlibs:Depends}
+Provides: libegl-vendor
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: free implementation of the EGL API -- Mesa vendor library
+ This package contains the EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES.
+ .
+ This package contains the Mesa vendor library for EGL, from Aurora's Mesa
+ for Apple Silicon.
+
+Package: libegl1-mesa-dev
+Section: libdevel
+Architecture: arm64
+Depends: libegl-dev, libglvnd-dev, ${misc:Depends}
+Multi-Arch: same
+Description: free implementation of the EGL API -- development files
+ This package contains the development environment required for compiling
+ programs against EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES.
+ .
+ This package provides the development environment for compiling programs
+ against the EGL library.
+
+Package: libgles2-mesa-dev
+Section: oldlibs
+Architecture: arm64
+Depends: libgles-dev, libglvnd-dev, ${misc:Depends}
+Multi-Arch: same
+Description: transitional dummy package
+ This is a transitional dummy package, it can be safely removed.
+
+Package: libglx-mesa0
+Section: libs
+Architecture: arm64
+Depends:
+ libgl1-mesa-dri,
+ mesa-libgallium (= ${binary:Version}),
+ ${misc:Depends},
+ ${shlibs:Depends}
+Provides: libglx-vendor
+Breaks: glx-diversions (<< 0.8.4~), libopengl-perl (<< 0.6704+dfsg-2)
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: free implementation of the OpenGL API -- GLX vendor library
+ Mesa is a 3-D graphics library with an API which is very similar to
+ that of OpenGL.  To the extent that Mesa utilizes the OpenGL command
+ syntax or state machine, it is being used with authorization from
+ Silicon Graphics, Inc.  However, the authors make no claim that Mesa
+ is in any way a compatible replacement for OpenGL or associated with
+ Silicon Graphics, Inc.
+ .
+ This version of Mesa provides GLX and DRI capabilities: it is capable of
+ both direct and indirect rendering.  For direct rendering, it can use DRI
+ modules from the libgl1-mesa-dri package to accelerate drawing.
+ .
+ This package does not include the modules themselves: these can be found
+ in the libgl1-mesa-dri package.
+
+Package: libgl1-mesa-dri
+Section: libs
+Architecture: arm64
+Pre-Depends: ${misc:Pre-Depends}
+Depends:
+ libgbm1 (= ${binary:Version}),
+ libvulkan1,
+ ${misc:Depends},
+ ${shlibs:Depends}
+Multi-Arch: same
+Description: free implementation of the OpenGL API -- DRI modules
+ This version of Mesa provides GLX and DRI capabilities: it is capable of
+ both direct and indirect rendering.  For direct rendering, it can use DRI
+ modules from the libgl1-mesa-dri package to accelerate drawing.
+ .
+ This package does not include the OpenGL library itself, only the DRI
+ modules for accelerating direct rendering: Aurora's Asahi Gallium driver
+ for Apple Silicon GPUs, Zink and softpipe.
+
+Package: libgl1-mesa-dev
+Section: oldlibs
+Architecture: arm64
+Depends: libgl-dev, libglvnd-dev, ${misc:Depends}
+Multi-Arch: same
+Description: transitional dummy package
+ This is a transitional dummy package, it can be safely removed.
+
+Package: mesa-common-dev
+Section: libdevel
+Architecture: arm64
+Depends:
+ libdrm-dev (>= 2.4.95),
+ libgl-dev,
+ libglx-dev,
+ libx11-dev,
+ ${misc:Depends}
+Breaks: libegl1-mesa-dev (<< 18.2.5-2)
+Replaces: libegl1-mesa-dev (<< 18.2.5-2)
+Multi-Arch: same
+Description: Developer documentation for Mesa
+ This package includes the specifications for the Mesa-specific OpenGL
+ extensions, the complete set of release notes and the development header
+ files common to all Mesa packages.
+
+Package: mesa-libgallium
+Section: libs
+Architecture: arm64
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Provides:
+ libglapi-mesa,
+ mesa-va-drivers,
+ mesa-vdpau-drivers,
+Breaks: mesa-va-drivers (<< 25.2.8-3), mesa-vdpau-drivers (<< 25.2.8-3)
+Replaces: mesa-va-drivers (<< 25.2.8-3), mesa-vdpau-drivers (<< 25.2.8-3)
+Description: shared infrastructure for Mesa drivers
+ This package contains libgallium, a private library shared between
+ multiple Mesa drivers. This library is an implementation detail of Mesa
+ and should not be used directly by user code.
+ .
+ Aurora's build has no VA-API driver; libva-v4l2-request decodes video on
+ Apple Silicon.
+
+Package: mesa-va-drivers
+Section: oldlibs
+Architecture: arm64
+Pre-Depends: ${misc:Pre-Depends}
+Depends: mesa-libgallium (>= ${binary:Version}), ${misc:Depends}
+Multi-Arch: same
+Description: Mesa VA-API graphics drivers - transitional package
+ This transitional package ensures that older versions of mesa-va-drivers
+ are replaced by mesa-libgallium during upgrades.
+ .
+ This is a transitional dummy package, it can be safely removed.
+
+Package: mesa-vdpau-drivers
+Section: oldlibs
+Architecture: arm64
+Pre-Depends: ${misc:Pre-Depends}
+Depends: mesa-libgallium (>= ${binary:Version}), ${misc:Depends}
+Multi-Arch: same
+Description: Mesa VDPAU graphics drivers - transitional package
+ This transitional package ensures that older versions of mesa-vdpau-drivers
+ are replaced by mesa-libgallium during upgrades.
+ .
+ This is a transitional dummy package, it can be safely removed.
+
+Package: mesa-vulkan-drivers
+Section: libs
+Architecture: arm64
+Pre-Depends: ${misc:Pre-Depends}
+Depends: libvulkan1, ${misc:Depends}, ${shlibs:Depends}
+Provides: vulkan-icd
+Multi-Arch: same
+Description: Mesa Vulkan graphics drivers
+ Vulkan is a low-overhead 3D graphics and compute API. This package
+ includes Aurora's Borealis Vulkan driver for Apple Silicon
+ GPUs, the lavapipe software driver and Mesa's Vulkan layers.
+
+Package: mesa-opencl-icd
+Section: libs
+Architecture: arm64
+Build-Profiles: <!cross>
+Pre-Depends: ${misc:Pre-Depends}
+Depends:
+ libclc-21,
+ ocl-icd-libopencl1 | libopencl1,
+ ${misc:Depends},
+ ${shlibs:Depends}
+Provides: opencl-icd
+Multi-Arch: same
+Description: free implementation of the OpenCL API -- ICD runtime
+ This package contains Mesa's Rusticl implementation of the OpenCL (Open
+ Compute Language) library, which is intended for use with an ICD loader.
+ OpenCL provides a standardized interface for computational analysis on
+ graphical processing units.

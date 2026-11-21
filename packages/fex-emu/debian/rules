@@ -1,0 +1,97 @@
+#!/usr/bin/make -f
+# FEX from Aurora's fork, built as alarm-aurora builds fex-emu: the emulator
+# and its tools, and a second, portable build as a Steam compatibility tool.
+
+include /usr/share/dpkg/architecture.mk
+
+FEX_COMMIT := $(shell sed -n 's/^commit=//p' debian/aurora-pin)
+FEX_RELEASE := $(shell sed -n 's/^version=//p' debian/aurora-pin)
+FEX_DESCRIBE := FEX-$(FEX_RELEASE)-aurora-g$(shell printf %.7s $(FEX_COMMIT))
+STEAM_TOOL = usr/share/steam/compatibilitytools.d/fex-aurora
+
+# FEX builds only with clang. FEX tunes for the build machine by default
+# (-mcpu from its /proc/cpuinfo), which crashes with SIGILL on Apple CPUs when
+# CI builds on Neoverse. Both builds use the bundled fmt (12): Debian's 11.1
+# cannot compile FEX's FMT_COMPILE formatting. fmt's directory asks for CMake
+# 3.28 policies, which turn on C++20 module scanning; nothing here uses
+# modules.
+common_flags = \
+	-DCMAKE_C_COMPILER=clang \
+	-DCMAKE_CXX_COMPILER=clang++ \
+	-DCMAKE_BUILD_TYPE=Release \
+	-DUSE_LINKER=lld \
+	-DENABLE_CCACHE=OFF \
+	-DTUNE_CPU=none \
+	-DENABLE_OFFLINE_TELEMETRY=OFF \
+	-DBUILD_TESTING=OFF \
+	-DBUILD_THUNKS=OFF \
+	-DOVERRIDE_VERSION=$(FEX_DESCRIBE) \
+	-DOVERRIDE_HASH=$(FEX_COMMIT) \
+	-DFMT_MODULE=OFF \
+	-DCMAKE_CXX_SCAN_FOR_MODULES=OFF
+ifneq ($(DEB_BUILD_ARCH),$(DEB_HOST_ARCH))
+common_flags += \
+	-DCMAKE_C_COMPILER_TARGET=$(DEB_HOST_GNU_TYPE) \
+	-DCMAKE_CXX_COMPILER_TARGET=$(DEB_HOST_GNU_TYPE) \
+	-DCMAKE_ASM_COMPILER_TARGET=$(DEB_HOST_GNU_TYPE)
+endif
+
+# FEXConfig (fex-emu-config) needs Qt 6, which does not cross-build here.
+ifneq (,$(filter cross,$(DEB_BUILD_PROFILES)))
+FEXCONFIG = OFF
+else
+FEXCONFIG = ON
+endif
+
+%:
+	dh $@ --buildsystem=cmake+ninja --builddirectory=build
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(common_flags) -DENABLE_LTO=ON \
+		-DBUILD_FEXCONFIG=$(FEXCONFIG)
+	# The Steam compatibility tool also bundles xxHash.
+	dh_auto_configure --builddirectory=steam-build -- $(common_flags) \
+		-DBUILD_STEAM_SUPPORT=ON -DBUILD_FEXCONFIG=OFF
+
+override_dh_auto_build:
+	dh_auto_build
+	dh_auto_build --builddirectory=steam-build
+
+# alarm-aurora's check: the tools report the fork's identity.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	test "$$(build/Bin/FEXGetConfig --version)" = "$(FEX_DESCRIBE)"
+endif
+
+override_dh_auto_install:
+	dh_auto_install
+	dh_auto_install --builddirectory=steam-build \
+		--destdir=debian/fex-emu-steam/$(STEAM_TOOL)
+	# FEX reads the runtime config aurora-fex-rootfs writes.
+	grep -qaF /run/fex-emu/Config.json debian/tmp/usr/bin/FEX
+	# The Steam tool's depot.
+	set -e; for f in FEXCompatTool usr/bin/FEX usr/bin/FEXServerManager \
+		toolmanifest.vdf emulator.json VERSIONS.txt; do \
+		test -e debian/fex-emu-steam/$(STEAM_TOOL)/$$f; \
+	done
+	grep -qF '$(FEX_DESCRIBE)' debian/fex-emu-steam/$(STEAM_TOOL)/VERSIONS.txt
+	install -m644 debian/compatibilitytool.vdf debian/fex-emu-steam/$(STEAM_TOOL)/
+	# toolmanifest.vdf starts /fex-compat-tool in the tool's root.
+	ln -s FEXCompatTool debian/fex-emu-steam/$(STEAM_TOOL)/fex-compat-tool
+	# The stock guest root filesystem below mesa-aurora-fex-guest's Aurora
+	# Mesa layer; its unit name is escaped.
+	install -D -m644 debian/fex-guest-rootfs.mount \
+		'debian/tmp/usr/lib/systemd/system/usr-share-guestos-fex\x2dmesa.mount'
+
+# Neither unit is enabled or started by the package: aurora-fex-mesa.service
+# (mesa-aurora-fex-guest) pulls the mount in, and aurora-fex-provider-up
+# restarts both when the image or the Mesa layer changes.
+override_dh_installsystemd:
+	dh_installsystemd -Nfex-emu
+
+# dwz does not handle all of clang's DWARF 5.
+override_dh_dwz:
+
+# Report files nothing installs instead of failing the long build.
+override_dh_missing:
+	dh_missing --list-missing

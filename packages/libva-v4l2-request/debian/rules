@@ -1,0 +1,27 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/architecture.mk
+
+DRIVERDIR = /usr/lib/$(DEB_HOST_MULTIARCH)/dri
+
+%:
+	dh $@ --buildsystem=meson
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-Ddriverdir=$(DRIVERDIR) \
+		-Dstrip=false \
+		-Dcodec_h264=enabled \
+		-Dcodec_hevc=enabled \
+		-Dcodec_vp9=enabled \
+		-Dcodec_av1=enabled
+
+override_dh_auto_test:
+	dh_auto_test -- --print-errorlogs
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/tmp
+	# libva loads <render node driver>_drv_video.so; Aurora kernels name the
+	# AGX render node's driver "aurora", Asahi kernels "asahi".
+	ln -s v4l2_request_drv_video.so debian/tmp$(DRIVERDIR)/asahi_drv_video.so
+	ln -s v4l2_request_drv_video.so debian/tmp$(DRIVERDIR)/aurora_drv_video.so

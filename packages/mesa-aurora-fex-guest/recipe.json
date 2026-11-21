@@ -1,0 +1,14 @@
+{
+  "source": "mesa-aurora-fex-guest",
+  "version": "26.3.0~devel.202611150611.d4ad4a4dce6-1",
+  "kind": "upstream",
+  "upstream": {
+    "pin": "mesa-aurora-fex-guest"
+  },
+  "changes": "Aurora's x86_64 Mesa (aurora-silicon/mesa d4ad4a4dce6, the same commit as the host mesa) as the FEX guest graphics layer, laid out for Debian and Ubuntu root filesystems, and aurora-fex-mesa.service, which lays it over FEX's stock guest root filesystem.",
+  "alarm": [
+    "mesa-aurora-fex-guest"
+  ],
+  "notes": "The one package with non-arm64 code: x86_64 Mesa in /usr/share/guestos, Architecture all. It must be built on an amd64 build machine (build-package --cross on amd64); a native arm64 build stops with that message. No i686 half yet: see docs/parity/graphics.md.",
+  "build_on": "amd64"
+}

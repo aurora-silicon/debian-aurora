@@ -1,0 +1,30 @@
+Source: libva-v4l2-request
+Section: video
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Standards-Version: 4.7.2
+Build-Depends:
+ debhelper-compat (= 13),
+ libdrm-dev,
+ libva-dev (>= 2.7),
+ linux-libc-dev (>= 6.5),
+ meson,
+ pkgconf,
+ python3:native
+Rules-Requires-Root: no
+Homepage: https://github.com/omacom/libva-v4l2_request
+
+Package: libva-v4l2-request
+Architecture: arm64
+Multi-Arch: same
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Provides: va-driver
+Description: VA-API driver for the Apple Video Decoder (V4L2 Request API)
+ A VA-API driver for stateless V4L2 Request API decoders, from the fork that
+ carries the Apple Video Decoder (AVD) support used on Apple Silicon Macs.
+ VA-API applications (mpv, Chromium, FFmpeg) decode H.264, HEVC, VP9 and AV1
+ on the AVD with it.
+ .
+ The driver is installed as v4l2_request and as the VA-API driver of the AGX
+ render node (asahi, aurora), so libva selects it without configuration. It
+ installs no firmware, browser preferences or environment overrides.

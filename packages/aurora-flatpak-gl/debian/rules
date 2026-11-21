@@ -1,0 +1,56 @@
+#!/usr/bin/make -f
+# The GL extension is built as alarm-aurora builds it: flatpak-builder in a
+# private user installation with the aarch64 Freedesktop runtimes from
+# Flathub (the build has network). On an amd64 build machine qemu-user
+# binfmt runs the aarch64 sandbox.
+
+include /usr/share/dpkg/pkg-info.mk
+include /usr/share/dpkg/buildopts.mk
+
+MESA_COMMIT := $(shell sed -n 's/^commit=//p' debian/aurora-pin)
+MESA_ARCHIVE := $(firstword $(wildcard $(CURDIR)/../$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM).orig.tar.*))
+BRANCHES = 25.08 26.08
+STATE = $(CURDIR)/debian/flatpak
+REPO = $(CURDIR)/debian/repo
+# flatpak-builder's work directories, on a path without a ~ (build-repository.sh).
+WORK = /tmp/aurora-flatpak-gl
+PKG = debian/aurora-flatpak-gl
+
+# Never a host Flatpak installation.
+export HOME = $(STATE)/home
+export XDG_DATA_HOME = $(STATE)/data
+export XDG_CACHE_HOME = $(STATE)/cache
+export XDG_CONFIG_HOME = $(STATE)/config
+export XDG_RUNTIME_DIR = $(STATE)/runtime
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	test -n '$(MESA_ARCHIVE)'
+	mkdir -p $(HOME) $(XDG_DATA_HOME) $(XDG_CACHE_HOME) $(XDG_CONFIG_HOME)
+	install -d -m700 $(XDG_RUNTIME_DIR)
+	AURORA_MESA_COMMIT=$(MESA_COMMIT) AURORA_MESA_ARCHIVE=$(MESA_ARCHIVE) \
+	AURORA_BUILD_JOBS=$(DEB_BUILD_OPTION_PARALLEL) \
+		dbus-run-session -- sh -e debian/gl/build-repository.sh $(REPO) $(WORK) $(BRANCHES)
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	# Refuse a stale repository even when built with nocheck.
+	bash debian/gl/validate-repo.sh $(REPO) $(MESA_COMMIT)
+	install -D -m755 debian/gl/aurora-flatpak-gl $(PKG)/usr/lib/aurora-flatpak-gl/aurora-flatpak-gl
+	install -D -m644 debian/gl/60-aurora-flatpak-gl.conf $(PKG)/usr/lib/environment.d/60-aurora-flatpak-gl.conf
+	install -D -m644 debian/gl/aurora-flatpak-gl.sh $(PKG)/etc/profile.d/aurora-flatpak-gl.sh
+	install -d $(PKG)/usr/share/aurora-flatpak-gl
+	cp -a $(REPO) $(PKG)/usr/share/aurora-flatpak-gl/repo
+
+override_dh_auto_clean:
+	rm -rf $(STATE) $(REPO) $(WORK)
+
+# The repository holds OSTree objects for the Flatpak sandbox, not files of
+# this system.
+override_dh_strip_nondeterminism:
+	dh_strip_nondeterminism -X/usr/share/aurora-flatpak-gl

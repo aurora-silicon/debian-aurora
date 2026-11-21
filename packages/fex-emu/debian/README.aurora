@@ -1,0 +1,118 @@
+# FEX on Aurora (Debian)
+
+This is FEX built from Aurora's fork (https://github.com/aurora-silicon/fex),
+packaged as fex-emu. FEXConfig, the graphical configuration editor, is in
+fex-emu-config; FEX as a Steam compatibility tool is in fex-emu-steam.
+
+## 4 KiB pages
+
+FEX needs a 4 KiB page size. Aurora kernels use 16 KiB pages but can give a
+process tree 4 KiB pages when the kernel is booted with `user4k=on` (the
+default on Aurora images; `aurora-userpages` provides the `userpages`
+launcher). Start x86 programs inside a 4 KiB tree:
+
+    userpages 4k FEXBash
+    userpages 4k FEX ./program
+
+Programs started from a 4 KiB tree inherit it, including x86 programs that
+binfmt_misc hands to FEX. Started from an ordinary 16 KiB process, FEX runs
+with 16 KiB pages and x86 programs fail. `userpages --status` shows the
+current page size. Aurora's Steam launcher starts Steam in a 4 KiB tree.
+
+## Hardware TSO
+
+On kernels that offer the memory-model prctl (PR_SET_MEM_MODEL), FEX switches
+the process to the hardware total store order mode and drops its software
+TSO emulation. Check with:
+
+    FEXGetConfig --tso-emulation-info
+
+## x86 parity and adjust flags
+
+Apple cores can compute the x86 parity and adjust flags, PF and AF, in
+hardware. When the kernel advertises this extension, called APFLG, FEX turns
+it on at startup and keeps PF and AF in the host flags instead of computing
+them in software. `FEX_HOSTFEATURES=disableapflg` turns it off.
+
+## binfmt_misc
+
+fex-emu registers FEX for x86 and x86-64 programs in /usr/lib/binfmt.d.
+qemu-user-binfmt registers qemu for the same programs; with both installed,
+whichever systemd-binfmt registers last runs them.
+
+## Root filesystem
+
+FEX needs an x86-64 root filesystem for anything but static programs. The
+global config, /etc/fex-emu/Config.json (read as
+/usr/share/fex-emu/Config.json), sets RootFS to
+/usr/share/fex-emu/RootFS/default.erofs. Debian has no package that installs
+an image there yet: put an EroFS image of an x86-64 root filesystem at that
+path, or download one for your user with FEXRootFSFetcher. FEXServer mounts
+an image RootFS with erofsfuse (or squashfuse) when FEX starts, and runs the
+FUSE helper with native pages (a 4 KiB page process can't serve a FUSE mount
+on Aurora's kernels), so `userpages 4k FEXBash` works without setup. To see
+the RootFS in use:
+
+    userpages 4k FEXGetConfig --current-rootfs
+
+Your own config, ~/.config/fex-emu/Config.json (~/.fex-emu/Config.json if
+that directory exists), and the FEX_ROOTFS environment variable override the
+global RootFS and Aurora's x86 Mesa (below). A RootFS of your own carries its
+own x86 Mesa; remove its RootFS entry from your config to go back to Aurora's.
+A RootFS given as a name rather than a path is looked up in
+~/.local/share/fex-emu/RootFS and /usr/share/fex-emu/RootFS.
+
+## Aurora's x86 Mesa
+
+A stock RootFS carries its distribution's x86 Mesa, which doesn't match
+Aurora's kernel and host Mesa. mesa-aurora-fex-guest, built from the same
+Mesa commit as Aurora's host Mesa, lays Aurora's x86_64 and i686 Mesa over
+the image: aurora-fex-mesa.service mounts the result, the graphics provider,
+read-only at /usr/share/guestos/aurora-fex-mesa. fex-emu mounts the image at
+/usr/share/guestos/fex-mesa as its lower layer; if the image arrives after
+the provider came up without it, fex-emu mounts the provider again over the
+image. The layer is laid out for Debian and Ubuntu directories (x86_64 in
+usr/lib/x86_64-linux-gnu, i686 in usr/lib/i386-linux-gnu), so the image
+should be a Debian or Ubuntu root filesystem. Steam's FEX titles get the
+provider from Steam; their root filesystem is the Steam runtime.
+
+To keep mesa-aurora-fex-guest installed but run x86 programs on the stock
+image, disable the provider (Steam's FEX titles then lose it too):
+
+    sudo systemctl disable --now aurora-fex-mesa.service
+
+or, for one user only, name the stock image in your own config:
+
+    { "Config": { "RootFS": "/usr/share/fex-emu/RootFS/default.erofs" } }
+
+While the provider is mounted, the other x86 programs FEX runs use it too
+(FEXBash and programs that binfmt_misc hands to FEX). After the service mounts
+it, /usr/libexec/fex-emu/aurora-fex-rootfs bind-mounts it read-only at
+/run/fex-emu/rootfs and writes /run/fex-emu/Config.json, a runtime config
+that FEX reads over the global one:
+
+    {
+      "Config": {
+        "RootFS": "/run/fex-emu/rootfs"
+      }
+    }
+
+It writes the file only if the provider has Aurora's Mesa layer, the image's
+x86-64 dynamic loader below it, and the layer's x86-64 Vulkan driver in the
+same directory. When the service stops, the provider can't be used, or the
+file can't be written in full (a full /run), the file goes and FEX uses the
+stock image through its FUSE helper as above; the service's journal says why.
+The provider is a kernel mount, so FEXServer starts no FUSE helper for it,
+and it works from a 4 KiB page tree as the image does.
+
+FEX runs from the bind, not from the provider's mount point, so the provider
+can be unmounted for an upgrade of mesa-aurora-fex-guest while x86 programs
+run. Those programs keep the mount they started on until they exit, but, as
+with any library upgrade, files they open afterwards can come from the new
+build. Programs started afterwards use the new provider. A bind still in use
+stays mounted below the new one, and goes at the next change once it is idle.
+A FEXServer keeps the RootFS it started with until its last x86 program exits.
+
+## Thunks
+
+This build has no host library thunks.

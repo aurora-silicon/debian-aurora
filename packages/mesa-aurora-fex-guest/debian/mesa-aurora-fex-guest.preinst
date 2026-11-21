@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+# The service mounts a read-only overlay with the layer as its top lower
+# directory; dpkg must not replace the layer below a mounted overlay. The
+# stop above unmounts it; refuse the upgrade if it is still mounted.
+if [ "$1" = upgrade ] && [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ] &&
+	mountpoint -q /usr/share/guestos/aurora-fex-mesa; then
+	echo 'FEX overlay /usr/share/guestos/aurora-fex-mesa is still mounted; unmount it before upgrading' >&2
+	exit 1
+fi
+
+exit 0

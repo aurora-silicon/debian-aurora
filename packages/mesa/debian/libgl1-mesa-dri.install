@@ -1,0 +1,3 @@
+usr/share/drirc.d/00-mesa-defaults.conf
+usr/share/drirc.d/00-asahi-defaults.conf
+usr/share/drirc.d/00-zink-defaults.conf

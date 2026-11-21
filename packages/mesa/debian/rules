@@ -1,0 +1,227 @@
+#!/usr/bin/make -f
+# debian/rules for Aurora's Mesa: Debian's mesa packaging (26.1.6-1) adapted
+# to the aurora-silicon/mesa commit pinned for mesa-aurora and to
+# alarm-aurora's driver selection.
+# Copyright © 2006 Thierry Reding <thierry@gilfi.de>
+
+include /usr/share/dpkg/pkg-info.mk
+include /usr/share/dpkg/architecture.mk
+
+# for finding the correct llvm-config when meson doesn't know about it yet
+LLVM_VERSION = 21
+export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
+
+export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
+
+DEB_CFLAGS_MAINT_APPEND := -Wall
+DEB_CXXFLAGS_MAINT_APPEND := -Wall
+buildflags = $(shell \
+	DEB_CFLAGS_MAINT_APPEND='$(DEB_CFLAGS_MAINT_APPEND)' \
+	DEB_CXXFLAGS_MAINT_APPEND='$(DEB_CXXFLAGS_MAINT_APPEND)' \
+	dpkg-buildflags --export=configure)
+
+# The archive has no .git: both trees name the pinned commit, which the
+# Borealis driverInfo carries as "(git-<commit>)".
+MESA_COMMIT := $(shell sed -n 's/^commit=//p' debian/aurora-pin)
+export MESA_GIT_SHA1_OVERRIDE = $(MESA_COMMIT)
+
+LIBDIR = usr/lib/$(DEB_HOST_MULTIARCH)
+TOOLS = $(CURDIR)/build-tools
+AURORA = $(CURDIR)/debian/aurora-build
+
+# Two trees, as alarm-aurora builds mesa-aurora. build-tools has LLVM: it
+# makes the CL compilers (mesa_clc, vtn_bindgen2, asahi_clc), Rusticl and
+# lavapipe. build has the native GL and Vulkan drivers, which link neither
+# LLVM nor SPIRV-Tools and use the compilers from build-tools.
+confflags_common = \
+	-Ddri-drivers-path=/$(LIBDIR)/dri \
+	-Dvulkan-manifest-per-architecture=false \
+	-Dplatforms=x11,wayland \
+	-Dgallium-drivers=asahi,zink,softpipe \
+	-Degl=enabled \
+	-Dgbm=enabled \
+	-Dglx=dri \
+	-Dgles1=enabled \
+	-Dgles2=enabled \
+	-Dglvnd=enabled \
+	-Dvideo-codecs=all \
+	-Dexpat=enabled \
+	-Dzstd=enabled \
+	-Dlmsensors=enabled \
+	-Dlibunwind=disabled \
+	-Dvalgrind=disabled \
+	-Db_ndebug=true
+
+confflags_tools = $(confflags_common) \
+	-Dvulkan-drivers=asahi,swrast \
+	-Dvulkan-layers= \
+	-Dllvm=enabled \
+	-Dgallium-rusticl=true \
+	-Dbuild-tests=false
+
+# Debian ships Mesa's Vulkan layers in mesa-vulkan-drivers (Arch, and so
+# alarm-aurora, in separate packages); the Intel one needs an Intel driver.
+confflags_main = $(confflags_common) \
+	-Dvulkan-drivers=asahi \
+	-Dvulkan-layers=anti-lag,device-select,overlay,screenshot \
+	-Dgallium-rusticl=false \
+	-Dllvm=disabled \
+	-Dspirv-tools=disabled \
+	-Dmesa-clc=system \
+	-Dprecomp-compiler=system \
+	-Dbuild-tests=true \
+	--native-file=$(AURORA)/tools.ini
+
+tools_compilers = \
+	src/compiler/clc/mesa_clc \
+	src/compiler/spirv/vtn_bindgen2 \
+	src/asahi/clc/asahi_clc
+
+tools_libraries = \
+	src/gallium/targets/rusticl/libRusticlOpenCL.so.1.0.0 \
+	src/gallium/targets/lavapipe/libvulkan_lvp.so \
+	src/gallium/targets/lavapipe/lvp_icd.json
+
+# Cross builds (the cross profile): Debian's LLVM development packages
+# cannot be installed for a foreign architecture beside the build machine's
+# Python (llvm-21-tools needs python3-yaml of its own architecture), so there
+# is no host LLVM. build-tools is then a build-machine tree that makes only
+# the CL compilers, as Mesa documents for cross builds, and neither Rusticl
+# (mesa-opencl-icd) nor lavapipe is built. Native builds are complete.
+ifneq (,$(filter cross,$(DEB_BUILD_PROFILES)))
+CROSS_PROFILE = yes
+confflags_compilers = \
+	-Dplatforms= \
+	-Dgallium-drivers= \
+	-Dvulkan-drivers= \
+	-Dglx=disabled \
+	-Degl=disabled \
+	-Dgbm=disabled \
+	-Dopengl=false \
+	-Dgles1=disabled \
+	-Dgles2=disabled \
+	-Dtools=asahi \
+	-Dllvm=enabled \
+	-Dmesa-clc=enabled \
+	-Dprecomp-compiler=enabled \
+	-Dshader-cache=disabled \
+	-Dzlib=disabled \
+	-Dzstd=disabled \
+	-Dexpat=disabled \
+	-Ddisplay-info=disabled \
+	-Dlmsensors=disabled \
+	-Dlibunwind=disabled \
+	-Dvalgrind=disabled \
+	-Dbuild-tests=false
+endif
+
+override_dh_clean:
+	if [ -e debian/VERSION.upstream ]; then mv debian/VERSION.upstream VERSION; fi
+	rm -rf build build-tools $(AURORA)
+	for file in debian/*.links.in; do rm -f $${file%%.in}; done
+	find -name '*.pyc' -delete
+	find -name '__pycache__' -delete
+	dh_clean
+
+override_dh_auto_configure:
+	[ -e debian/VERSION.upstream ] || cp VERSION debian/VERSION.upstream
+	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' > VERSION
+	mkdir -p $(AURORA)
+	printf '%s\n' '[binaries]' \
+		"llvm-config = '/usr/lib/llvm-$(LLVM_VERSION)/bin/llvm-config'" \
+		> $(AURORA)/llvm.ini
+ifeq ($(CROSS_PROFILE),yes)
+	# The build machine's tree, without the host's build flags.
+	env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS \
+		meson setup build-tools . --wrap-mode=nodownload --buildtype=release \
+		--native-file=$(AURORA)/llvm.ini $(confflags_compilers)
+else
+	$(buildflags) dh_auto_configure --builddirectory=build-tools -- \
+		--native-file=$(AURORA)/llvm.ini $(confflags_tools)
+endif
+	dh_auto_build --builddirectory=build-tools -- $(tools_compilers)
+	printf '%s\n' '[binaries]' \
+		"mesa_clc = '$(TOOLS)/src/compiler/clc/mesa_clc'" \
+		"vtn_bindgen2 = '$(TOOLS)/src/compiler/spirv/vtn_bindgen2'" \
+		"asahi_clc = '$(TOOLS)/src/asahi/clc/asahi_clc'" > $(AURORA)/tools.ini
+	$(buildflags) dh_auto_configure -- $(confflags_main)
+
+override_dh_auto_build:
+ifneq ($(CROSS_PROFILE),yes)
+	dh_auto_build --builddirectory=build-tools -- $(tools_libraries)
+endif
+	dh_auto_build
+
+override_dh_auto_test:
+	dh_auto_test -- --print-errorlogs
+
+override_dh_auto_install:
+	dh_auto_install
+	for file in debian/*.links.in; \
+	do \
+		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
+			$${file} > $${file%%.in}; \
+	done
+ifneq ($(CROSS_PROFILE),yes)
+	# Rusticl and lavapipe from the LLVM tree.
+	install -d debian/tmp/$(LIBDIR) debian/tmp/etc/OpenCL/vendors \
+		debian/tmp/usr/share/vulkan/icd.d
+	install -m644 build-tools/src/gallium/targets/rusticl/libRusticlOpenCL.so.1.0.0 \
+		debian/tmp/$(LIBDIR)/
+	ln -s libRusticlOpenCL.so.1.0.0 debian/tmp/$(LIBDIR)/libRusticlOpenCL.so.1
+	ln -s libRusticlOpenCL.so.1 debian/tmp/$(LIBDIR)/libRusticlOpenCL.so
+	install -m644 build-tools/src/gallium/targets/rusticl/rusticl.icd \
+		debian/tmp/etc/OpenCL/vendors/
+	install -m644 build-tools/src/gallium/targets/lavapipe/libvulkan_lvp.so \
+		debian/tmp/$(LIBDIR)/
+	install -m644 build-tools/src/gallium/targets/lavapipe/lvp_icd.json \
+		debian/tmp/usr/share/vulkan/icd.d/
+	# The LLVM tree's libraries are AArch64 and lavapipe's manifest names
+	# its library.
+	for f in debian/tmp/$(LIBDIR)/libRusticlOpenCL.so.1.0.0 \
+		debian/tmp/$(LIBDIR)/libvulkan_lvp.so; do \
+		readelf -h $$f | grep -q 'Machine:.*AArch64' || exit 1; \
+	done
+	grep -F '"library_path": "libvulkan_lvp.so"' \
+		debian/tmp/usr/share/vulkan/icd.d/lvp_icd.json
+endif
+	# alarm-aurora's package checks: Borealis names the pinned commit, and
+	# nothing but Rusticl and lavapipe follows LLVM or SPIRV-Tools.
+	strings debian/tmp/$(LIBDIR)/libvulkan_asahi.so | \
+		grep -F "(git-$(shell printf %.10s $(MESA_COMMIT))), Borealis"
+	set -e; find debian/tmp -name '*.so*' -type f \
+		! -name 'libRusticlOpenCL.so*' ! -name libvulkan_lvp.so | \
+	while read f; do \
+		if LC_ALL=C readelf -d $$f | grep -Eq 'NEEDED.*(libLLVM|libSPIRV-Tools)'; then \
+			echo "Unexpected compiler runtime dependency: $$f" >&2; exit 1; \
+		fi; \
+	done
+
+override_dh_install:
+	# purge .la files
+	find debian/tmp/ -name '*.la' -exec rm '{}' ';'
+
+	# Get rid of some files which aren't installed. Do not
+	# use -f to ensure we notice disappearing files:
+	rm debian/tmp/usr/lib/*/libEGL_mesa.so
+	rm debian/tmp/usr/lib/*/libGLX_mesa.so
+
+	# Copy the hardlinked *_dri.so correctly.
+	install -m755 -d debian/libgl1-mesa-dri/$(LIBDIR)/dri/
+	mv debian/tmp/$(LIBDIR)/dri/*_dri.so \
+	   debian/libgl1-mesa-dri/$(LIBDIR)/dri/
+
+	dh_install -a
+
+# Report files nothing installs instead of failing: Aurora's tree can add
+# files Debian's lists do not name yet.
+override_dh_missing:
+	dh_missing --list-missing
+
+override_dh_makeshlibs:
+	dh_makeshlibs -a -- -c4
+
+%:
+	dh $@ \
+		--builddirectory=build/ \
+		--buildsystem=meson

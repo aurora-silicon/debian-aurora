@@ -1,0 +1,17 @@
+usr/bin/FEX
+usr/bin/FEXBash
+usr/bin/FEXGetConfig
+usr/bin/FEXOfflineCompiler
+usr/bin/FEXRootFSFetcher
+usr/bin/FEXServer
+usr/bin/FEXpidof
+usr/include/FEXCore
+usr/lib/*/libFEXCore.so
+usr/lib/binfmt.d
+usr/lib/systemd/system/usr-share-guestos-fex*.mount
+usr/share/fex-emu
+usr/share/man/man1/FEX.1.gz
+debian/50-aurora-fex-rootfs.conf usr/lib/systemd/system/aurora-fex-mesa.service.d
+debian/aurora-fex-provider-up usr/libexec/fex-emu
+debian/aurora-fex-rootfs usr/libexec/fex-emu
+debian/Config.json etc/fex-emu

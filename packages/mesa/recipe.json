@@ -1,0 +1,9 @@
+{
+  "source": "mesa",
+  "version": "26.3.0~devel.202611150611.d4ad4a4dce6-1",
+  "kind": "upstream",
+  "upstream": {"pin": "mesa-aurora"},
+  "changes": "Aurora's Mesa (aurora-silicon/mesa d4ad4a4dce6, 26.3.0-devel) with Debian's mesa 26.1.6-1 packaging and binary package names.\nalarm-aurora's driver selection: Asahi Gallium, Zink and softpipe, the Borealis Vulkan driver, lavapipe and Rusticl; the native GL and Vulkan drivers link neither LLVM nor SPIRV-Tools.\nDrop the drivers Apple Silicon cannot use, Teflon, drm-shim and the Gallium VA-API front end.",
+  "alarm": ["mesa-aurora", "vulkan-aurora", "opencl-rusticl-aurora", "vulkan-lavapipe-aurora"],
+  "notes": "Starts from Debian testing's mesa 26.1.6-1 debian/ directory. Cross builds run the host LLVM, bindgen and the CL compilers through binfmt_misc (qemu-user); see docs/parity/graphics.md."
+}

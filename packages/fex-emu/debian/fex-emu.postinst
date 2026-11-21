@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+case "$1" in
+configure|triggered)
+	# Bring Aurora's FEX guest graphics provider up and point FEX's RootFS
+	# at it (README.aurora). A failure leaves FEX on the stock RootFS.
+	/usr/libexec/fex-emu/aurora-fex-provider-up || true
+	;;
+esac
+
+exit 0

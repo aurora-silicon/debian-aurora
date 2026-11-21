@@ -1,0 +1,8 @@
+{
+  "source": "libva-v4l2-request",
+  "version": "1.3+r11.g4f60c51-1",
+  "kind": "upstream",
+  "upstream": {"pin": "libva-v4l2-request-avd"},
+  "changes": "VA-API driver for the Apple Video Decoder (AVD) through the V4L2 Request API, from the AVD fork of libva-v4l2_request at 4f60c51, with alarm-aurora's three patches (offline test portability, Chrome's AV1 path and multi-tile AV1).\nSelected for the AGX render node under both of its driver names (asahi, aurora).",
+  "alarm": ["libva-v4l2-request-avd"]
+}

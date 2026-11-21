@@ -1,0 +1,10 @@
+{
+  "source": "aurora-flatpak-gl",
+  "version": "26.3.0~devel.202611150611.d4ad4a4dce6-1",
+  "kind": "upstream",
+  "upstream": {"pin": "mesa-aurora"},
+  "network": true,
+  "changes": "org.freedesktop.Platform.GL.aurora for the Freedesktop 25.08 and 26.08 runtimes: Aurora's Mesa (the same commit as the host mesa) built with flatpak-builder as alarm-aurora builds it, in a local OSTree repository that the package installs into the system Flatpak installation and enables ahead of Flathub's GL.default.",
+  "alarm": ["aurora-flatpak-gl"],
+  "notes": "Its source is the Mesa archive pinned for mesa-aurora (the extension's Mesa module builds from it); the packaging is alarm-aurora's recipe. The build installs the aarch64 Freedesktop runtimes, SDK and LLVM 22 SDK extension from Flathub and fetches the manifest's pinned sources, as alarm-aurora's does."
+}

@@ -1,0 +1,55 @@
+Source: aurora-steam-native
+Section: games
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Standards-Version: 4.7.2
+Build-Depends:
+ debhelper-compat (= 13),
+ desktop-file-utils <!nocheck>,
+ python3:native <!nocheck>
+Rules-Requires-Root: no
+Homepage: https://github.com/aurora-silicon/aurora-steam-native
+
+Package: aurora-steam-native
+Architecture: all
+Depends:
+ aurora-userpages,
+ fex-emu,
+ libgtk2.0-0t64,
+ libibus-1.0-5,
+ lsof,
+ python3,
+ ${misc:Depends}
+Recommends:
+ gir1.2-adw-1,
+ gir1.2-gtk-4.0,
+ libnotify-bin,
+ mesa-aurora-fex-guest,
+ mesa-vulkan-drivers,
+ python3-gi
+Description: Valve's native ARM64 Steam client in a 4 KiB page process tree
+ Starts Valve's native ARM64 Linux Steam client through `userpages 4k`, so
+ Steam, its runtime, Proton, FEX and the games it starts get the 4 KiB pages
+ they assume on Aurora's 16 KiB page kernels. Includes Aurora Play, a small
+ launcher for the installed games.
+ .
+ Valve's runtime carries libibus and lsof for x86 only; the ARM64 client
+ takes them from the system. Nothing from Valve is shipped in this package.
+
+Package: steam
+Architecture: all
+Depends:
+ aurora-gamemode,
+ aurora-steam-native (= ${binary:Version}),
+ python3,
+ systemd,
+ ${misc:Depends}
+Conflicts: steam-installer, steam-launcher
+Description: Steam for Aurora (native ARM64 client)
+ `steam` for Aurora on Apple Silicon. The first start installs Valve's native
+ ARM64 Linux client for the current user from Valve's CDN, checked against
+ Valve's manifest, then starts it in a 4 KiB page process tree. The kernel
+ must be booted with user4k=on (the default on Aurora images).
+ .
+ Games it starts run under GameMode when gamemoded is available; set
+ AURORA_STEAM_GAMEMODE=0 in the environment to start them without it.

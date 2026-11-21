@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+configure)
+	# Report a failed setup with the retry command, but don't fail: image
+	# builds and offline installs may have no usable flatpak yet.
+	/usr/lib/aurora-flatpak-gl/aurora-flatpak-gl enable || \
+		echo 'Aurora Flatpak GL setup failed; run /usr/lib/aurora-flatpak-gl/aurora-flatpak-gl enable to retry.' >&2
+	;;
+esac
+
+#DEBHELPER#
+
+exit 0

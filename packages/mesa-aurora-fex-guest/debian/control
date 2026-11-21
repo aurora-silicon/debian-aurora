@@ -1,0 +1,73 @@
+Source: mesa-aurora-fex-guest
+Section: graphics
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Standards-Version: 4.7.2
+Build-Depends:
+ debhelper-compat (= 13),
+ bison,
+ flex,
+ glslang-tools,
+ libclang-21-dev:native,
+ libclang-cpp21-dev:native,
+ libdisplay-info-dev:native,
+ libdrm-dev:native,
+ libexpat1-dev:native,
+ libglvnd-core-dev:native,
+ libllvmspirvlib-21-dev:native,
+ libudev-dev:native,
+ libvulkan-dev:native,
+ libwayland-dev:native,
+ libwayland-egl-backend-dev:native,
+ libx11-dev:native,
+ libx11-xcb-dev:native,
+ libxcb-dri2-0-dev:native,
+ libxcb-dri3-dev:native,
+ libxcb-glx0-dev:native,
+ libxcb-keysyms1-dev:native,
+ libxcb-present-dev:native,
+ libxcb-randr0-dev:native,
+ libxcb-shm0-dev:native,
+ libxcb-sync-dev:native,
+ libxcb-xfixes0-dev:native,
+ libxext-dev:native,
+ libxfixes-dev:native,
+ libxrandr-dev:native,
+ libxshmfence-dev:native,
+ libxxf86vm-dev:native,
+ libzstd-dev:native,
+ linux-libc-dev,
+ llvm-21-dev:native,
+ meson (>= 1.7.0),
+ ninja-build,
+ pkgconf:native,
+ python3:native,
+ python3-mako:native,
+ python3-packaging,
+ python3-yaml:native,
+ spirv-tools-dev:native,
+ wayland-protocols,
+ x11proto-dev,
+ zlib1g-dev:native
+Rules-Requires-Root: no
+Homepage: https://github.com/aurora-silicon/mesa
+
+Package: mesa-aurora-fex-guest
+Architecture: all
+Depends:
+ libgl1-mesa-dri (= ${source:Version}),
+ mesa-vulkan-drivers (= ${source:Version}),
+ mount,
+ util-linux,
+ ${misc:Depends}
+Description: Aurora Mesa (x86_64) as the FEX guest graphics provider
+ The x86_64 build of Aurora's Asahi Gallium, Zink and Borealis Vulkan
+ drivers, from the same Mesa commit as the host's Mesa, laid over FEX's
+ stock guest root filesystem as a graphics provider at
+ /usr/share/guestos/aurora-fex-mesa. Without it, x86 programs run under FEX
+ load a guest Mesa with no Apple G17P support and every GPU job they submit
+ is rejected.
+ .
+ The layer is laid out for Debian and Ubuntu root filesystems. It is x86
+ code for the FEX guest, not for this system; it links neither LLVM nor
+ SPIRV-Tools, so it works with any guest release.

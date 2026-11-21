@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+case "$1" in
+remove|purge)
+	# Nothing reads the runtime config or the provider's bind without FEX.
+	rm -f /run/fex-emu/Config.json
+	umount /run/fex-emu/rootfs 2>/dev/null || true
+	;;
+esac
+
+exit 0

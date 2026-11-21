@@ -1,0 +1,132 @@
+#!/usr/bin/make -f
+# Aurora's x86_64 Mesa for the FEX guest, built as alarm-aurora builds
+# mesa-aurora-fex-guest: a build-machine tree with LLVM makes the CL
+# compilers, and the drivers are built without LLVM, SPIRV-Tools, lm-sensors
+# or libunwind, whose sonames follow the guest's release. The layer is x86
+# code shipped for an arm64 host, so it is built on an amd64 build machine
+# (build-package --cross) and packaged as Architecture: all.
+
+include /usr/share/dpkg/architecture.mk
+include /usr/share/dpkg/buildopts.mk
+
+MESA_COMMIT := $(shell sed -n 's/^commit=//p' debian/aurora-pin)
+export MESA_GIT_SHA1_OVERRIDE = $(MESA_COMMIT)
+
+LLVM_VERSION = 21
+export PATH := /usr/lib/llvm-$(LLVM_VERSION)/bin:$(PATH)
+
+# The guest's build flags are not the host's.
+MESON = env -u CFLAGS -u CPPFLAGS -u CXXFLAGS -u LDFLAGS meson
+AURORA = $(CURDIR)/debian/aurora-build
+TOOLS = $(CURDIR)/build-tools
+GUEST_LIBDIR = lib/x86_64-linux-gnu
+LAYER = debian/mesa-aurora-fex-guest/usr/share/guestos/aurora-fex-mesa-layer
+
+common = \
+	--prefix=/usr \
+	--buildtype=release \
+	-Db_ndebug=true \
+	--wrap-mode=nodownload \
+	-Dplatforms=x11,wayland \
+	-Dgallium-drivers=asahi,zink,softpipe \
+	-Dvulkan-drivers=asahi \
+	-Dvulkan-layers= \
+	-Dglx=dri \
+	-Degl=enabled \
+	-Dgbm=enabled \
+	-Dgles1=disabled \
+	-Dgles2=enabled \
+	-Dglvnd=enabled \
+	-Dgallium-rusticl=false \
+	-Dbuild-tests=false \
+	-Dvalgrind=disabled \
+	-Dvideo-codecs= \
+	-Dmicrosoft-clc=disabled \
+	-Dlibunwind=disabled \
+	-Dlmsensors=disabled
+
+# Only the CL compilers, as Mesa documents for cross builds.
+compilers = \
+	-Dplatforms= \
+	-Dgallium-drivers= \
+	-Dvulkan-drivers= \
+	-Dglx=disabled \
+	-Degl=disabled \
+	-Dgbm=disabled \
+	-Dopengl=false \
+	-Dgles1=disabled \
+	-Dgles2=disabled \
+	-Dtools=asahi \
+	-Dllvm=enabled \
+	-Dmesa-clc=enabled \
+	-Dprecomp-compiler=enabled \
+	-Dshader-cache=disabled \
+	-Dzlib=disabled \
+	-Dzstd=disabled \
+	-Dexpat=disabled \
+	-Ddisplay-info=disabled \
+	-Dlmsensors=disabled \
+	-Dlibunwind=disabled \
+	-Dvalgrind=disabled \
+	-Dbuild-tests=false
+
+drivers = \
+	-Dllvm=disabled \
+	-Dspirv-tools=disabled \
+	-Dmesa-clc=system \
+	-Dprecomp-compiler=system \
+	--native-file=$(AURORA)/tools.ini
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	@if [ "$(DEB_BUILD_ARCH)" != amd64 ]; then \
+		echo 'mesa-aurora-fex-guest builds x86 code: build it on amd64 (build-package --cross)' >&2; \
+		exit 1; \
+	fi
+	mkdir -p $(AURORA)
+	printf '%s\n' '[binaries]' \
+		"llvm-config = '/usr/lib/llvm-$(LLVM_VERSION)/bin/llvm-config'" \
+		> $(AURORA)/llvm.ini
+	$(MESON) setup build-tools . --buildtype=release --wrap-mode=nodownload \
+		--native-file=$(AURORA)/llvm.ini $(compilers)
+	ninja -C build-tools $(DEB_BUILD_OPTION_PARALLEL:%=-j%) \
+		src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/asahi/clc/asahi_clc
+	printf '%s\n' '[binaries]' \
+		"mesa_clc = '$(TOOLS)/src/compiler/clc/mesa_clc'" \
+		"vtn_bindgen2 = '$(TOOLS)/src/compiler/spirv/vtn_bindgen2'" \
+		"asahi_clc = '$(TOOLS)/src/asahi/clc/asahi_clc'" > $(AURORA)/tools.ini
+	$(MESON) setup b64 . --libdir=$(GUEST_LIBDIR) $(common) $(drivers)
+
+override_dh_auto_build:
+	ninja -C b64 $(DEB_BUILD_OPTION_PARALLEL:%=-j%)
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	DESTDIR=$(CURDIR)/$(LAYER) $(MESON) install -C b64 --no-rebuild
+	rm -rf $(LAYER)/usr/include $(LAYER)/usr/$(GUEST_LIBDIR)/pkgconfig
+	printf '%s\n' '$(MESA_COMMIT)' > $(LAYER)/.aurora-mesa-commit
+	install -d debian/mesa-aurora-fex-guest/usr/share/guestos/aurora-fex-mesa
+	# alarm-aurora's checks: x86-64 drivers that need no runtime whose
+	# soname follows the guest's release.
+	set -e; for f in $(LAYER)/usr/$(GUEST_LIBDIR)/libgallium-*.so \
+		$(LAYER)/usr/$(GUEST_LIBDIR)/libvulkan_asahi.so; do \
+		readelf -h $$f | grep -q 'Class:.*ELF64'; \
+		readelf -h $$f | grep -q 'Machine:.*X86-64'; \
+	done
+	if find $(LAYER) -name '*.so*' -type f -exec readelf -d {} + | \
+		grep -E 'NEEDED.*(libLLVM|libSPIRV-Tools|libsensors|libunwind)'; then \
+		echo 'guest driver needs a release-specific runtime' >&2; exit 1; \
+	fi
+	strings $(LAYER)/usr/$(GUEST_LIBDIR)/libvulkan_asahi.so | \
+		grep -F "(git-$(shell printf %.10s $(MESA_COMMIT))), Borealis"
+
+override_dh_auto_clean:
+	rm -rf build-tools b64 $(AURORA)
+
+# Enabled, as Aurora images enable it. It is stopped before an upgrade
+# replaces the layer below its mount, and started again afterwards.
+override_dh_installsystemd:
+	dh_installsystemd --name=aurora-fex-mesa --no-restart-after-upgrade

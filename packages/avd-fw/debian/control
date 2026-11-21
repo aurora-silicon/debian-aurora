@@ -1,0 +1,27 @@
+Source: avd-fw
+Section: kernel
+Priority: optional
+Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
+Standards-Version: 4.7.2
+Build-Depends:
+ debhelper-compat (= 13),
+ clang-22:native,
+ lld-22:native,
+ llvm-22:native,
+ meson (>= 1.4.0),
+ python3:native
+Rules-Requires-Root: no
+Homepage: https://github.com/aurora-silicon/avd-fw
+
+Package: avd-fw
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: open firmware for the Apple Video Decoder (AVD)
+ Open replacement firmware for the Cortex-M3 controller of the Apple Video
+ Decoder in Apple Silicon Macs, generations v2 through v5, including the
+ MacBook Neo transport. The kernel's AVD driver loads it from
+ /usr/lib/firmware/apple; libva-v4l2-request then decodes video through it.
+ .
+ It is built from source; no proprietary firmware is extracted or shipped.
+ The linked ELF images are kept in /usr/lib/debug/firmware/apple.

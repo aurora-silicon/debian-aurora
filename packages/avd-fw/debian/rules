@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+# Bare-metal Cortex-M3 firmware. The host's build flags are not for this
+# target, and the images must match the shared clang 22 hash manifest, so
+# meson runs directly with the source's cross file and without them.
+
+export PATH := /usr/lib/llvm-22/bin:$(PATH)
+MESON = env -u CFLAGS -u CPPFLAGS -u CXXFLAGS -u LDFLAGS meson
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	$(MESON) setup --cross-file llvm.ini --prefix=/usr build
+
+override_dh_auto_build:
+	$(MESON) compile -C build
+	python3 debian/check-firmware.py build
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	$(MESON) test -C build --print-errorlogs
+endif
+
+override_dh_auto_install:
+	DESTDIR=$(CURDIR)/debian/avd-fw $(MESON) install -C build --no-rebuild
+	# Firmware images, not programs.
+	chmod 644 debian/avd-fw/usr/lib/firmware/apple/*.bin
+	# The exact linked symbols, beside the open firmware.
+	install -d debian/avd-fw/usr/lib/debug/firmware/apple
+	install -m644 build/avd-fw-*.elf debian/avd-fw/usr/lib/debug/firmware/apple/
+
+override_dh_auto_clean:
+	rm -rf build
+
+# Bare-metal ARM images: nothing to strip or scan for the host.
+override_dh_strip override_dh_dwz override_dh_strip_nondeterminism:

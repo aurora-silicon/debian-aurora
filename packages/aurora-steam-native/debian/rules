@@ -1,0 +1,50 @@
+#!/usr/bin/make -f
+
+LIB = /usr/lib/aurora-steam-native
+USER4K_HINT = aurora-userpages adds user4k=on to GRUB_CMDLINE_LINUX unless /etc/default/grub sets user4k=; remove user4k=off there, run sudo update-grub and reboot
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	sed -e 's,@LIBDIR@,$(LIB),' -e 's,@USERPAGES@,/usr/bin/userpages,' \
+		-e 's|@USER4K_HINT@|$(USER4K_HINT)|' debian/steam.in > debian/steam.aurora
+	# alarm-aurora's checks: the launcher is complete and valid shell.
+	bash -n debian/steam.aurora
+	! grep -n '@[A-Z0-9_]*@' debian/steam.aurora
+	grep -qx 'userpages=$${AURORA_USERPAGES_LAUNCHER:-/usr/bin/userpages}' debian/steam.aurora
+	grep -qx 'lib=$(LIB)' debian/steam.aurora
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	desktop-file-validate debian/steam.desktop share/applications/org.aurorasilicon.Play.desktop
+	set -e; for t in tests/test-steam-native4k-launch-env.py tests/test-offline-installer.py \
+		tests/test-aurora-play-settings.py; do \
+		python3 -I -B $$t; \
+	done
+endif
+
+override_dh_auto_install:
+	install -D -m755 install-steam-arm64.py debian/aurora-steam-native$(LIB)/install-steam-arm64.py
+	install -D -m755 bin/steam-native4k debian/aurora-steam-native$(LIB)/bin/steam-native4k
+	install -D -m755 bin/aurora-play debian/aurora-steam-native$(LIB)/bin/aurora-play
+	install -D -m755 libexec/steam-native4k-launch-loop.sh \
+		debian/aurora-steam-native$(LIB)/libexec/steam-native4k-launch-loop.sh
+	# The installer copies these next to itself when it sets up a user.
+	install -D -m644 share/applications/steam-native-arm64.desktop \
+		debian/aurora-steam-native$(LIB)/share/applications/steam-native-arm64.desktop
+	install -D -m644 share/applications/org.aurorasilicon.Play.desktop \
+		debian/aurora-steam-native$(LIB)/share/applications/org.aurorasilicon.Play.desktop
+	install -D -m644 share/icons/hicolor/scalable/apps/org.aurorasilicon.Play.svg \
+		debian/aurora-steam-native$(LIB)/share/icons/hicolor/scalable/apps/org.aurorasilicon.Play.svg
+	install -D -m644 share/applications/org.aurorasilicon.Play.desktop \
+		debian/aurora-steam-native/usr/share/applications/org.aurorasilicon.Play.desktop
+	install -D -m644 share/icons/hicolor/scalable/apps/org.aurorasilicon.Play.svg \
+		debian/aurora-steam-native/usr/share/icons/hicolor/scalable/apps/org.aurorasilicon.Play.svg
+	install -d debian/aurora-steam-native/usr/bin
+	ln -s ../lib/aurora-steam-native/bin/aurora-play debian/aurora-steam-native/usr/bin/aurora-play
+	install -D -m755 debian/steam.aurora debian/steam/usr/bin/steam
+	install -D -m644 debian/steam.desktop debian/steam/usr/share/applications/steam.desktop
+
+override_dh_auto_clean:
+	rm -f debian/steam.aurora

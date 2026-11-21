@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+remove)
+	# The helper reports what it left; a failure must not block removal.
+	/usr/lib/aurora-flatpak-gl/aurora-flatpak-gl disable || true
+	;;
+esac
+
+#DEBHELPER#
+
+exit 0

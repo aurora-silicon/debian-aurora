@@ -1,0 +1,6 @@
+# Aurora's FEX guest graphics provider follows its lower layer (an image in
+# RootFS) and mesa-aurora-fex-guest's Mesa layer: installed, upgraded or
+# removed, aurora-fex-provider-up mounts it again and points FEX's RootFS at
+# it, or back at the stock image.
+interest-noawait /usr/share/fex-emu/RootFS
+interest-noawait /usr/share/guestos/aurora-fex-mesa-layer
