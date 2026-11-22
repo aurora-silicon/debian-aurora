@@ -4,7 +4,7 @@ Debian testing (forky) packages and images for Aurora Linux on Apple Silicon Mac
 
 ## Development status
 
-Nothing here is hardware-qualified. No image from this repository has been installed or booted on a Mac, and the CI workflows have not run yet.
+Nothing here is hardware-qualified yet. debian-minimal, debian-kde and debian-gnome, built locally, have been installed with a test build of the installer and booted on a MacBook Air (M1, J313). No other Mac has run them, and the CI workflows have not run yet.
 
 - Every alarm-aurora package has a recipe, or is Debian's own package, or is marked not applicable: [docs/alarm-parity.md](docs/alarm-parity.md), with each package group's build results in `docs/parity/`.
 - Publication needs the production archive key: its public half in `packages/aurora-archive-keyring/keys/aurora-debian-archive.asc` and its fingerprint in `keys/fingerprint.txt` ([packages/aurora-archive-keyring/keys/README.md](packages/aurora-archive-keyring/keys/README.md)).
