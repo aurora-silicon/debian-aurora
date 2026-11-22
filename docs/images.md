@@ -41,16 +41,19 @@ During the build, apt checks the Aurora repository against `AURORA_ARCHIVE_KEY` 
   - `kde-plasma-desktop` for `plasma-meta`, and `gnome-core` and `gdm3` for GNOME;
   - `grub-efi-arm64-bin` and `grub2-common`. Debian's `grub-efi-arm64` would reinstall GRUB on every update and undo the hardened core.
 - Desktops install with recommendations, which bring Debian's desktop applications. Minimal images install without them.
+- Debian splits what Arch's `linux-firmware` carries. The images add `firmware-realtek`, `firmware-mediatek` and `firmware-atheros` to `firmware-linux`, for the USB network adapters alarm-aurora supports (r8152, mt76, ath9k_htc).
+- NetworkManager's Wi-Fi backend, `wpasupplicant`, is listed explicitly: minimal images install without recommendations, and Debian's `network-manager` only recommends it.
 - SDDM is excluded. `kde-plasma-desktop` recommends it, and the install refuses it (`sddm-`). Plasma Login is the KDE display manager: its greeter runs on KWin Wayland at the display's scale. A drop-in keeps the splash up until the greeter starts, as GDM does.
 
 ### Locale and accounts
 
 - The default locale is written twice: to `/etc/default/locale`, which Debian's PAM sessions read through `pam_env`, and to `/etc/locale.conf`, which systemd reads. alarm-aurora writes only `/etc/locale.conf`. `en_US.UTF-8` is enabled in `/etc/locale.gen` and generated.
 - Debian has no `wheel` group. The image creates it as a system group, and `aurora-firstboot` puts the owner in it, as on Arch. `root` is locked.
+- Debian's `useradd` defaults to `/bin/sh`. The image sets `/etc/default/useradd` to `/bin/bash`, so the owner the desktop setups create (Plasma's, and GNOME's through accountsservice) gets bash, as `aurora-firstboot`'s owner does and as on Arch and Fedora.
 
 ### Units
 
-- The images contain no account, no machine ID and no ssh host keys. Debian's `ssh.service` expects host keys, so a drop-in (`ssh.service.d/10-aurora-host-keys.conf`) runs `ssh-keygen -A` before sshd starts. Remote login stays off until the owner enables it.
+- The images contain no account, no machine ID, no hostname and no ssh host keys. mmdebstrap copies the build host's `/etc/hostname`, so the build removes it. `aurora-firstboot` asks for a name on the console, and Plasma's setup offers one. GNOME's setup doesn't, so a GNOME install uses the name NetworkManager gets from the network until the owner sets one, as on alarm-aurora. Debian's `ssh.service` expects host keys, so a drop-in (`ssh.service.d/10-aurora-host-keys.conf`) runs `ssh-keygen -A` before sshd starts. Remote login stays off until the owner enables it.
 - Debian's unit names: `ssh.service` and `ssh.socket` (`sshd.service` is an alias), `gdm.service`, `plasmalogin.service`. `systemd-resolved` is its own package. NetworkManager uses it for DNS, and systemd-networkd is disabled.
 
 ### Presets
@@ -66,7 +69,7 @@ The build applies the presets before enabling the image's own units. It fails if
 
 ### Initrd and GRUB
 
-- The initrd is built by dracut, with `aurora-boot`'s dracut modules (alarm-aurora uses mkinitcpio). It is written to Debian's `/boot/initrd.img-<kernel>`, and the finalizer regenerates it with its `aurora-root` module.
+- The initrd is built by dracut, with `aurora-boot`'s dracut modules (alarm-aurora uses mkinitcpio). `aurora-boot` omits dracut's busybox module, which the desktops' recommendations would otherwise pull in. Its applet links replace util-linux's `lsblk` and the full `awk` that `aurora-initrd-root` needs. It is written to Debian's `/boot/initrd.img-<kernel>`, and the finalizer regenerates it with its `aurora-root` module.
 - `/etc/default/grub` starts from `grub2-common`'s template, and `update-grub` writes `/boot/grub/grub.cfg`. Debian's GRUB has Arch's layout, so the finalizer hardens it with `harden-grub.py`'s `arch` flavour, and `check-basics.py --esp` checks the same files as on alarm-aurora.
 
 ### Image checks
@@ -80,6 +83,8 @@ The build applies the presets before enabling the image's own units. It fails if
 - `ssh.service` and `ssh.socket`.
 
 It checks the Touch ID policy, not how a package implements it. `fprintd`'s pam-auth-update profile puts `pam_fprintd` in `common-auth` behind a service test, and a `sufficient` line in each service file would pass as well. Its NixOS (`--system`) and Fedora (`--grub-flavor fedora`) paths are gone.
+
+After finalizing, the build fails if the finalizer's initrd inventory lists any busybox applet link.
 
 ### Not carried over yet
 
