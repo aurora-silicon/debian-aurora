@@ -11,6 +11,7 @@ Rules-Requires-Root: no
 Package: aurora-speaker-upgrade
 Architecture: all
 Depends: python3, python3-cryptography, util-linux, alsa-utils, systemd, ${misc:Depends}
+Recommends: libglib2.0-bin
 Suggests: speakerguardd-v2, lzfse
 Description: Move the speakers to speakerguardd v2 with this Mac's own tuning
  aurora-speaker-upgrade moves an installed Mac's speakers from the legacy

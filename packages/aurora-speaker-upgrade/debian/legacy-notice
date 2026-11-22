@@ -12,6 +12,9 @@ case "$1" in
 	state=${XDG_STATE_HOME:-$HOME/.local/state}/aurora-speaker-upgrade
 	[ -e "$state/legacy-notice-1" ] && exit 0
 	body="This Mac's speakers are protected by speakersafetyd or speakerguardd 0.1, which will be removed. Please help bring up speakerguardd v2: run 'sudo aurora-speaker-upgrade --check' in a terminal (a dry run), then 'sudo aurora-speaker-upgrade', and report the result at https://github.com/aurora-silicon/speakerguardd/issues."
+	# GNOME Shell takes the notification name once it is up, which can be
+	# after the autostart applications start.
+	gdbus wait --session org.freedesktop.Notifications || exit 0
 	busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
 		org.freedesktop.Notifications Notify 'susssasa{sv}i' \
 		"Aurora" 0 audio-speakers "$summary" "$body" 0 0 0 >/dev/null || exit 0
