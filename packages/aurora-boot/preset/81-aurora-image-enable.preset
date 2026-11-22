@@ -1,0 +1,32 @@
+# Units Aurora images keep on. Debian's packages enable them when they are
+# installed, without consulting presets; listing them here keeps them on when
+# presets are applied in full, which 99-aurora-default.preset's "disable *"
+# would otherwise turn off. The image build applies presets in full and fails
+# if a unit's state differs from its preset.
+
+# NetworkManager runs the network, with systemd-resolved for DNS. Debian's
+# ifupdown (networking.service) stays off.
+enable NetworkManager.service
+enable NetworkManager-dispatcher.service
+enable NetworkManager-wait-online.service
+enable systemd-resolved.service
+enable systemd-resolved-monitor.socket
+enable systemd-resolved-varlink.socket
+enable bluetooth.service
+enable aurora-fex-mesa.service
+
+# The display managers and Plasma's first-run setup, in the images that carry
+# them.
+enable plasmalogin.service
+enable plasma-setup.service
+enable gdm.service
+
+# Debian's maintenance jobs.
+enable apt-daily.timer
+enable apt-daily-upgrade.timer
+enable cron.service
+enable dpkg-db-backup.timer
+enable e2scrub_all.timer
+enable e2scrub_reap.service
+enable fstrim.timer
+enable logrotate.timer

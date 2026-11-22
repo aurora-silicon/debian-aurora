@@ -60,12 +60,22 @@ During the build, apt checks the Aurora repository against `AURORA_ARCHIVE_KEY` 
 
 An install's first boot applies every preset in enable-only mode. On Debian, maintainer scripts enable units at installation without consulting presets, and Debian ships no `99-default.preset`. Without one, that first boot would enable every installed unit nobody chose.
 
-`aurora-boot` carries two presets:
+`aurora-boot` carries these presets:
 
 - `80-aurora-image.preset`: alarm-aurora's units, with Debian's names.
+- `81-aurora-image-enable.preset`: the units the image keeps on, which Debian's maintainer scripts enable without consulting presets:
+  - NetworkManager, systemd-resolved and Bluetooth;
+  - the display managers and Plasma's first-run setup;
+  - Debian's maintenance jobs: apt's daily timers, `cron`, `dpkg-db-backup`, `e2scrub`, `fstrim` and `logrotate`.
+
+  Debian's ifupdown (`networking.service`) stays off, because NetworkManager runs the network.
 - `99-aurora-default.preset` (`disable *`): the disable-everything rule Arch and Fedora ship as `99-default.preset`.
 
-The build applies the presets before enabling the image's own units. It fails if applying them again would still change a unit. The finalizer checks the same in enable-only mode.
+The build applies the presets in full before enabling the image's own units, so nothing a maintainer script enabled stays on unless a preset names it. A full pass also drops `/etc/systemd/system/default.target`, which the build sets afterwards.
+
+At the end, the build runs two checks, and the finalizer runs the same two:
+- applying the presets in enable-only mode, as the first boot does, must change nothing;
+- no unit may be enabled or disabled against its preset in `systemctl list-unit-files`.
 
 ### Initrd and GRUB
 

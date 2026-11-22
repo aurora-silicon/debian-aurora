@@ -205,8 +205,11 @@ printf '[Service]\nExecStartPre=\nExecStartPre=/usr/bin/ssh-keygen -A\nExecStart
   > "$mountroot/etc/systemd/system/ssh.service.d/10-aurora-host-keys.conf"
 
 # An install's first boot applies every preset in enable-only mode. Apply
-# them here, so the image already has what they enable.
-chroot "$mountroot" systemctl preset-all --preset-mode=enable-only
+# them here in full, so the image already has what they enable and nothing
+# that Debian's maintainer scripts enabled against them (aurora-boot's
+# 81-aurora-image-enable.preset names the units the image keeps on). A full
+# pass also drops /etc/systemd/system/default.target, which is set below.
+chroot "$mountroot" systemctl preset-all --preset-mode=full
 enable=(NetworkManager.service bluetooth.service aurora-peripherals.service systemd-resolved.service)
 [[ ! -e $mountroot/usr/lib/systemd/system/aurora-fex-mesa.service ]] || enable+=(aurora-fex-mesa.service)
 chroot "$mountroot" systemctl enable "${enable[@]}"
@@ -296,6 +299,15 @@ rm -rf "$mountroot"/var/lib/apt/lists/*
 presets=$(chroot "$mountroot" systemctl preset-all --preset-mode=enable-only 2>&1) || { printf '%s\n' "$presets" >&2; exit 1; }
 if grep -E '^(Created symlink|Removed) ' <<<"$presets" >&2; then
   echo 'Units differ from their presets; the first boot would change them' >&2
+  exit 1
+fi
+# Nor may a unit be on against its preset: one the image keeps on needs a line
+# in 81-aurora-image-enable.preset. (finalize-image checks the same.)
+against=$(chroot "$mountroot" systemctl list-unit-files --no-legend --no-pager |
+  awk '($2 == "enabled" && $3 == "disabled") || ($2 == "disabled" && $3 == "enabled")')
+if [[ -n $against ]]; then
+  printf '%s\n' "$against" >&2
+  echo 'Units are enabled or disabled against their presets' >&2
   exit 1
 fi
 # Every image ships the basics; a build that lacks one fails here instead of

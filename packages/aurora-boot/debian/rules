@@ -13,5 +13,5 @@ override_dh_auto_install:
 	# Debian's GRUB reads /etc/default/grub.d after /etc/default/grub.
 	install -Dm644 -t $(PKG)/etc/default/grub.d grub/40-aurora-console.cfg grub/45-aurora-mte.cfg
 	install -Dm644 -t $(PKG)/usr/lib/systemd/system-preset preset/80-aurora-image.preset \
-	  preset/85-aurora-enable.preset preset/99-aurora-default.preset
+	  preset/81-aurora-image-enable.preset preset/85-aurora-enable.preset preset/99-aurora-default.preset
 	install -Dm644 preset/user/85-aurora-enable.preset $(PKG)/usr/lib/systemd/user-preset/85-aurora-enable.preset
