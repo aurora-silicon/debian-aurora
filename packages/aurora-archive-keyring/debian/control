@@ -11,7 +11,7 @@ Package: aurora-archive-keyring
 Architecture: all
 Multi-Arch: foreign
 Depends: ${misc:Depends}
-Description: Aurora Debian archive key and package pin
- The public key that signs Aurora Debian's package repository, and an apt
+Description: archive key and package pin of Aurora's Debian testing packages
+ The public key that signs Aurora's Debian testing package repository, and an apt
  preference (priority 990) that keeps Aurora's builds of Debian packages
  installed in place of Debian's own.

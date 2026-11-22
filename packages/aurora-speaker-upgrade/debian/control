@@ -21,7 +21,7 @@ Description: Move the speakers to speakerguardd v2 with this Mac's own tuning
  switches the kernel's speaker interface only on a pass. The legacy stack
  stays installed and keeps any Mac whose self-check refuses.
  .
- On Aurora Debian the switch is opt in: the boot unit, which runs the same
+ On Aurora's Debian testing images the switch is opt in: the boot unit, which runs the same
  switch at every boot, is installed disabled. The legacy protection is
  deprecated; while it holds the speakers, a notice at login asks the user to
  try speakerguardd v2 and report the result. Reading Apple's LZFSE-compressed

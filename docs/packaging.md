@@ -1,6 +1,6 @@
 # Packaging
 
-Every Aurora Debian package is a recipe in `packages/<name>/`. `scripts/recipe.py prepare <name> <dir>` turns it into a Debian source package; `scripts/build-package [--cross] <name>...` builds it with sbuild in a clean Debian testing build root pinned to the snapshot in `images/base.json`. Binary packages land in `out/packages/` (or `$AURORA_PACKAGES_DIR`), and later builds in the same run resolve build dependencies from there.
+Every package of Aurora's Debian testing images is a recipe in `packages/<name>/`. `scripts/recipe.py prepare <name> <dir>` turns it into a Debian source package; `scripts/build-package [--cross] <name>...` builds it with sbuild in a clean Debian testing build root pinned to the snapshot in `images/base.json`. Binary packages land in `out/packages/` (or `$AURORA_PACKAGES_DIR`), and later builds in the same run resolve build dependencies from there.
 
 ## recipe.json
 

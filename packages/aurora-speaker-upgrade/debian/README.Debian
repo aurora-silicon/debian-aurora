@@ -1,5 +1,5 @@
-aurora-speaker-upgrade on Aurora Debian
-=======================================
+aurora-speaker-upgrade on Aurora, based on Debian testing
+=========================================================
 
 speakerguardd v2 is opt in. A fresh install keeps the legacy speaker
 protection on the Macs it supports: speakersafetyd (with

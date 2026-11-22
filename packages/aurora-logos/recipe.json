@@ -1,8 +1,8 @@
 {
   "source": "aurora-logos",
-  "version": "1",
+  "version": "2",
   "kind": "native",
-  "changes": "Aurora's desktop icons (aurora-logo-icon and start-here in hicolor, system-logo-white.png) and the About this System branding, as alarm-aurora's aurora-logos installs them.",
+  "changes": "Aurora's desktop icons (aurora-logo-icon and start-here in hicolor, system-logo-white.png) and the About this System branding, as alarm-aurora's aurora-logos installs them.\nAbout this System names the system \"Aurora, based on Debian testing\".",
   "alarm": ["aurora-logos"],
-  "notes": "The images are alarm-aurora's, byte for byte (provenance.json names their fedora-aurora origin). kcm-about-distrorc says Name=Aurora Debian where alarm-aurora says Aurora Alarm. Debian's desktop-base owns /etc/xdg/kcm-about-distrorc (Debian logo, Version=forky/sid), so this package Replaces desktop-base to take that one conffile over; dpkg keeps it when desktop-base is upgraded."
+  "notes": "The images are alarm-aurora's, byte for byte (provenance.json names their fedora-aurora origin). kcm-about-distrorc says Name=Aurora, based on Debian testing where alarm-aurora says Aurora Alarm. Debian's desktop-base owns /etc/xdg/kcm-about-distrorc (Debian logo, Version=forky/sid), so this package Replaces desktop-base to take that one conffile over; dpkg keeps it when desktop-base is upgraded."
 }

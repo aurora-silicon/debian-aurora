@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble, sign and verify an Aurora Debian apt repository.
+"""Assemble, sign and verify the apt repository of Aurora's Debian testing packages.
 
     sign-repository.py --packages DIR --output DIR --channel testing [--production]
 
@@ -21,7 +21,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ORIGIN = 'Aurora Silicon'
-LABEL = 'Aurora Debian'
+LABEL = 'Aurora, based on Debian testing'
 SUITE = 'aurora'
 CHANNELS = ('testing', 'stable', 'edge')
 
@@ -84,7 +84,7 @@ def assemble(packages, output, channel):
         '-o', f'APT::FTPArchive::Release::Codename={SUITE}',
         '-o', 'APT::FTPArchive::Release::Architectures=arm64 all',
         '-o', 'APT::FTPArchive::Release::Components=main',
-        '-o', f'APT::FTPArchive::Release::Description=Aurora Debian packages ({channel} channel)',
+        '-o', f'APT::FTPArchive::Release::Description=Aurora packages for Debian testing ({channel} channel)',
         'release', '.'], cwd=dists)
     (dists / 'Release').write_bytes(release)
     return dists

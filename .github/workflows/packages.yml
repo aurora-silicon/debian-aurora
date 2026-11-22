@@ -218,4 +218,4 @@ jobs:
           tar -C repository -cf debian-aurora-repository.tar .
           gh release create "$tag" debian-aurora-repository.tar --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --prerelease --title "Debian Aurora $tag" \
-            --notes 'Signed Aurora Debian packages (suite aurora, component main) for Debian testing on Apple Silicon Macs: an apt repository in one archive. Development snapshot; not hardware-qualified.'
+            --notes 'Signed Aurora packages for Debian testing (suite aurora, component main) for Debian testing on Apple Silicon Macs: an apt repository in one archive. Development snapshot; not hardware-qualified.'

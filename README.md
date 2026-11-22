@@ -1,6 +1,8 @@
-# Aurora Debian
+# debian-aurora
 
 Debian testing (forky) packages and images for Aurora Linux on Apple Silicon Macs: the Debian producer beside [alarm-aurora](https://github.com/aurora-silicon/alarm-aurora) (Arch Linux ARM), fedora-aurora, nixos-aurora and omarchy-aurora. It mirrors alarm-aurora package for package and image step for step, and publishes KDE Plasma, GNOME and minimal images (`debian-kde`, `debian-gnome`, `debian-minimal`) through the same contract as the other producers: aurora-distributions' `build-payload.yml` turns an attested image build into a signed payload for the native [Aurora installer](https://github.com/aurora-silicon/aurora-installer).
+
+The installer offers them as "Aurora, based on Debian testing". Debian's trademark policy keeps its marks out of product names, so the product is Aurora, and "based on Debian testing" is a factual description.
 
 ## Development status
 

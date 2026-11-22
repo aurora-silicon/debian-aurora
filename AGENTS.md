@@ -1,4 +1,4 @@
-# Aurora Debian: contributor notes
+# debian-aurora: contributor notes
 
 For everyone who changes this repository, human or agent. Aurora Silicon's contributor policy applies; these are the repository's own conventions.
 

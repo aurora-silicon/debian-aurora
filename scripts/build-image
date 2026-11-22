@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and seal an Aurora Debian image for the native installer.
+# Build and seal an image of "Aurora, based on Debian testing" for the native installer.
 #
 #   scripts/build-image PROFILE REPOSITORY [CHANNEL]
 #

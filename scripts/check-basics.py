@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Fail an Aurora Debian image build that lacks the basics every image must have.
+"""Fail an image build of Aurora's Debian testing images that lacks the basics every image must have.
 
 Checked against the finished root (and, with --esp, the EFI and boot
 filesystems the installer writes). These are alarm-aurora's checks, read

@@ -193,7 +193,7 @@ installed as documentation): `aurora-logo-icon` and `places/start-here` in
 hicolor at ten sizes, and `/usr/share/pixmaps/system-logo-white.png`.
 
 Deviations:
-- `kcm-about-distrorc` says `Name=Aurora Debian` (alarm-aurora: `Aurora
+- `kcm-about-distrorc` says `Name=Aurora, based on Debian testing` (alarm-aurora: `Aurora
   Alarm`); `LogoPath` and `Website` are alarm-aurora's.
 - Debian's desktop-base owns `/etc/xdg/kcm-about-distrorc` (`LogoPath=
   emblem-debian`, `Version=forky/sid`) as a conffile, and Debian's desktops

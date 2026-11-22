@@ -1,8 +1,8 @@
 {
   "source": "aurora-boot",
-  "version": "20261018.3",
+  "version": "20261018.4",
   "kind": "native",
-  "changes": "Aurora Debian boot integration: the initrd (dracut) contents and order of alarm-aurora's mkinitcpio hooks, GRUB settings, and the image's unit presets.\nupdate-grub runs Debian's (diverted to update-grub.debian) and then aurora-harden-grub, so a regenerated grub.cfg keeps GRUB's lookups on the startup disk.",
+  "changes": "Boot integration of Aurora's Debian testing images: the initrd (dracut) contents and order of alarm-aurora's mkinitcpio hooks, GRUB settings, and the image's unit presets.\nupdate-grub runs Debian's (diverted to update-grub.debian) and then aurora-harden-grub, so a regenerated grub.cfg keeps GRUB's lookups on the startup disk.",
   "alarm": ["aurora-boot"],
   "notes": "alarm-aurora's per-machine pacman keyring service has no Debian counterpart (apt keyrings are public; aurora-archive-keyring ships Aurora's). Debian lacks Arch's 99-default.preset, so this package carries the equivalent disable-everything-else rule."
 }

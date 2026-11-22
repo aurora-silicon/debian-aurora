@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build local installer test inputs for Aurora Debian images.
+"""Build local installer test inputs for the images of "Aurora, based on Debian testing".
 
     scripts/installer-test-inputs --installer DIR --output DIR PROFILE...
 

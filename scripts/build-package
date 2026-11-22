@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Aurora Debian packages from packages/<name> recipes in a clean,
+# Build Aurora's Debian testing packages from packages/<name> recipes in a clean,
 # unprivileged Debian testing build root (sbuild's unshare backend).
 #
 #   scripts/build-package [--cross] NAME...
