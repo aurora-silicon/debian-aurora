@@ -148,9 +148,12 @@ for package in alsa-ucm-conf-asahi asahi-audio sddm; do
     echo "$package is installed beside Aurora's stack" >&2; exit 1
   fi
 done
-# Every graphics package comes from the one Aurora Mesa build.
+# Every graphics package comes from the one Aurora Mesa build. Aurora's Mesa
+# keeps Debian's binary package names, so the installed version must be the
+# one Aurora's repository carries.
 mesa_version=$(chroot "$mountroot" dpkg-query -W -f '${Version}' libgl1-mesa-dri)
-[[ $mesa_version == *aurora* ]]
+chroot "$mountroot" apt-cache madison libgl1-mesa-dri |
+  awk -F ' [|] ' -v version="$mesa_version" '$2 == version && $3 ~ / aurora\/main / { found = 1 } END { exit !found }'
 for package in mesa-vulkan-drivers libegl-mesa0; do
   [[ $(chroot "$mountroot" dpkg-query -W -f '${Version}' "$package") == "$mesa_version" ]]
 done
