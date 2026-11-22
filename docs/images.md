@@ -88,3 +88,13 @@ These alarm-aurora image steps have no Debian counterpart yet:
 - the Edge overlay snapshot (an `edge` image installs from the given repository and follows the Edge feed);
 - the Flatpak GL runtime check;
 - the checks that the camera filter, keyboard backlight and Wi-Fi firmware units are enabled.
+
+## Installing a local image with the installer
+
+`scripts/installer-test-inputs` turns built images into the inputs of a local installer test build, without Aurora's catalog key:
+
+```sh
+scripts/installer-test-inputs --installer ../aurora-installer --output out/installer-test debian-kde debian-minimal
+```
+
+It assembles each image's payload with the installer's own scripts and its signed Recovery template (as aurora-distributions' `build-payload.yml` does), writes a catalog for every supported Mac, and signs it with a local test key (`cache/installer-test-key`). On a Mac, in the installer's `macOS` directory, `AURORA_ENABLE_DEBIAN=1 AURORA_DEVELOPER_BUILD=1 AURORA_LOCAL_PAYLOAD_TEST_BUILD=1 Packaging/build-app.sh out/installer-test/release-inputs APP_OUTPUT` builds the app and `Packaging/build-developer-pkg.sh` packages it. The target Mac needs `out/installer-test/AuroraInstallerTestPayloads` copied to `/Users/Shared/AuroraInstallerTestPayloads` (aurora-installer's `docs/private-local-payload-install.md`). Only a build made from these inputs accepts their catalogs.

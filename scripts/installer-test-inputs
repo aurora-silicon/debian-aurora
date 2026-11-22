@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Build local installer test inputs for Aurora Debian images.
+
+    scripts/installer-test-inputs --installer DIR --output DIR PROFILE...
+
+For each PROFILE (debian-kde, debian-gnome, debian-minimal) it takes
+out/PROFILE-filesystems.tar.zst (scripts/build-image), assembles the installer
+payload with the installer's own scripts and its signed Recovery template, as
+aurora-distributions' build-payload workflow does, writes a catalog for every
+supported Mac and signs it with a local test key (cache/installer-test-key,
+created on first use).
+
+OUTPUT/release-inputs is the release directory for a local test build of the
+installer (macOS, in the installer's macOS directory):
+
+    AURORA_ENABLE_DEBIAN=1 AURORA_DEVELOPER_BUILD=1 AURORA_LOCAL_PAYLOAD_TEST_BUILD=1 \\
+      Packaging/build-app.sh OUTPUT/release-inputs APP_OUTPUT
+    Packaging/build-developer-pkg.sh "APP_OUTPUT/Aurora Installer.app" OUTPUT.pkg
+
+OUTPUT/AuroraInstallerTestPayloads holds the payloads in the cache layout such
+a build reads on the target Mac (/Users/Shared/AuroraInstallerTestPayloads).
+The test key is not Aurora's catalog key: only a build made from these inputs
+accepts the catalogs.
+"""
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+ROOT = Path(__file__).resolve().parents[1]
+PROFILES = ('debian-kde', 'debian-gnome', 'debian-minimal')
+# The Recovery template aurora-distributions' build-payload workflow uses.
+RUNTIME = 'https://github.com/aurora-silicon/aurora-installer/releases/download/native-runtime-v0.9.2-aurora.14'
+RECOVERY = 'aurora-recovery-template-alpha1.tar.gz'
+# Recorded in the catalog as build-payload records them.
+PROVENANCE = {
+    'asahi_installer_tag': 'v0.9.2',
+    'asahi_installer_revision': 'dffbb38ef0c00c0431c609ecd8a00f42deb5b24c',
+    'asahi_installer_data_revision': '42648e71423eba308d2e3e6228253eff679b068b',
+}
+BASE_URL = 'https://aurorasilicon.org/local-test'
+ED25519_DER = bytes.fromhex('302a300506032b6570032100')
+
+
+def run(*command, **options):
+    subprocess.run(command, check=True, **options)
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as stream:
+        for block in iter(lambda: stream.read(1 << 20), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def verify(public_key, message, signature, work):
+    key = work / 'public.der'
+    key.write_bytes(ED25519_DER + public_key)
+    run('openssl', 'pkeyutl', '-verify', '-pubin', '-keyform', 'DER', '-inkey', str(key),
+        '-rawin', '-in', str(message), '-sigfile', str(signature), stdout=subprocess.DEVNULL)
+
+
+def test_key():
+    directory = ROOT / 'cache/installer-test-key'
+    private = directory / 'catalog-test.ed25519.key'
+    if not private.exists():
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        key = Ed25519PrivateKey.generate()
+        private.write_bytes(key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                                              serialization.NoEncryption()))
+        private.chmod(0o600)
+    key = Ed25519PrivateKey.from_private_bytes(private.read_bytes())
+    return key, key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+
+
+def recovery_template(installer, work):
+    """Download the Recovery template and check it against the installer's trust root."""
+    runtime = work / 'runtime'
+    runtime.mkdir()
+    for name in ('runtime-manifest.json', 'runtime-manifest.json.sig', RECOVERY):
+        urllib.request.urlretrieve(f'{RUNTIME}/{name}', runtime / name)
+    trust_root = (installer / 'macOS/Release/trust-root.ed25519.pub').read_bytes()
+    verify(trust_root, runtime / 'runtime-manifest.json', runtime / 'runtime-manifest.json.sig', work)
+    record = json.loads((runtime / 'runtime-manifest.json').read_text())['assets'][RECOVERY]
+    archive = runtime / RECOVERY
+    if archive.stat().st_size != record['bytes'] or sha256(archive) != record['sha256']:
+        raise SystemExit(f'{RECOVERY} does not match the signed runtime manifest')
+    with tarfile.open(archive) as tar:
+        tar.extractall(work / 'recovery', filter='data')
+    return work / 'recovery/Aurora Installer.app'
+
+
+def build_profile(profile, installer, recovery, release_id, key, public, output, work):
+    scripts = installer / 'macOS/scripts'
+    archive = ROOT / 'out' / f'{profile}-filesystems.tar.zst'
+    expected = (ROOT / 'out' / f'{archive.name}.sha256').read_text().split()[0]
+    if sha256(archive) != expected:
+        raise SystemExit(f'{archive} does not match its .sha256')
+    filesystems = work / profile / 'filesystems'
+    filesystems.mkdir(parents=True)
+    with subprocess.Popen(['zstd', '-dc', str(archive)], stdout=subprocess.PIPE) as zstd:
+        with tarfile.open(fileobj=zstd.stdout, mode='r|') as tar:
+            tar.extractall(filesystems, filter='data')
+    if zstd.returncode:
+        raise SystemExit(f'zstd failed on {archive}')
+    if json.loads((filesystems / 'image.json').read_text())['installation_profile'] != profile:
+        raise SystemExit(f'{archive} is not a {profile} image')
+    assets = work / profile / 'assets'
+    run(sys.executable, str(scripts / 'assemble-distribution-payload.py'), '--filesystems', str(filesystems),
+        '--recovery-app', str(recovery), '--output', str(assets), '--release-id', release_id,
+        stdout=subprocess.DEVNULL)
+    shutil.rmtree(filesystems)
+
+    sys.path.insert(0, str(scripts))
+    import supported_models
+    models, _ = supported_models.load()
+    revision = subprocess.run(['git', '-C', str(installer), 'rev-parse', 'HEAD'], check=True,
+                              capture_output=True, text=True).stdout.strip()
+    inputs = {'schema_version': 5, 'installation_profile': profile,
+              'payload_name': f'{profile}-{release_id}.zip', 'metadata_name': f'installer-data-{profile}.json',
+              'evidence_revision': f'image-build-local-{release_id}', **PROVENANCE,
+              'downstream_revision': revision, 'device_identifiers': models,
+              'installer': {'minimum_version': '0.1.0', 'latest_version': '0.1.0',
+                            'download_url': 'https://github.com/aurora-silicon/aurora-installer/releases'}}
+    (work / profile / 'catalog-inputs.json').write_text(json.dumps(inputs, indent=2) + '\n')
+    catalog = assets / 'catalog.json'
+    run(sys.executable, str(scripts / 'make-unsigned-catalog.py'), '--base-url', f'{BASE_URL}/{profile}',
+        '--assets-dir', str(assets), '--inputs', str(work / profile / 'catalog-inputs.json'),
+        '--output', str(catalog), stdout=subprocess.DEVNULL)
+    signature = assets / 'catalog.json.sig'
+    signature.write_bytes(key.sign(catalog.read_bytes()))
+    verify(public, catalog, signature, work)
+
+    release = output / 'release-inputs/Profiles' / profile
+    release.mkdir(parents=True)
+    (release / 'trust-root.ed25519.pub').write_bytes(public)
+    run('bash', str(scripts / 'make-release-descriptor'), '--adhoc', '--public-key',
+        str(release / 'trust-root.ed25519.pub'), '--base-url', f'{BASE_URL}/installer/Profiles/{profile}',
+        '--output', str(release / 'release.json'), stdout=subprocess.DEVNULL)
+    for name in ('catalog.json', 'catalog.json.sig'):
+        shutil.copyfile(assets / name, release / name)
+    for name in (inputs['payload_name'], inputs['metadata_name']):
+        path = assets / name
+        cache = output / 'AuroraInstallerTestPayloads' / sha256(path)
+        cache.mkdir(parents=True)
+        os.replace(path, cache / name)
+    return release
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--installer', type=Path, required=True, help='aurora-installer checkout')
+    parser.add_argument('--output', type=Path, required=True, help='new output directory')
+    parser.add_argument('--release-id', default='local-test')
+    parser.add_argument('profiles', nargs='+', choices=PROFILES)
+    args = parser.parse_args()
+    if args.output.exists():
+        raise SystemExit(f'{args.output} exists')
+    key, public = test_key()
+    with tempfile.TemporaryDirectory(prefix='installer-test-', dir=ROOT / 'out') as temporary:
+        work = Path(temporary)
+        recovery = recovery_template(args.installer.resolve(), work)
+        releases = [build_profile(profile, args.installer.resolve(), recovery, args.release_id, key, public,
+                                  args.output, work) for profile in args.profiles]
+    # build-app.sh reads the root descriptor and requires a sealed catalog for a
+    # developer build; the first profile's serves.
+    for name in ('release.json', 'trust-root.ed25519.pub', 'catalog.json', 'catalog.json.sig'):
+        shutil.copyfile(releases[0] / name, args.output / 'release-inputs' / name)
+    print(args.output / 'release-inputs')
+
+
+if __name__ == '__main__':
+    main()
