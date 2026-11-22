@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+# aurora-boot's update-grub runs Debian's, renamed to update-grub.debian, and
+# then reapplies Aurora's GRUB hardening.
+case "$1" in
+    install|upgrade)
+        dpkg-divert --package aurora-boot --divert /usr/sbin/update-grub.debian \
+            --rename --add /usr/sbin/update-grub
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

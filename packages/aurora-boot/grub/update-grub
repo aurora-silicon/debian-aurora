@@ -1,0 +1,14 @@
+#!/bin/sh
+# Debian's update-grub, which aurora-boot diverts to update-grub.debian,
+# followed by Aurora's GRUB hardening. Debian runs update-grub on every
+# kernel installation and removal (/etc/kernel/post*.d/zz-update-grub), and a
+# regenerated grub.cfg loses the lookups aurora-harden-grub confines to the
+# startup disk.
+set -e
+/usr/sbin/update-grub.debian "$@"
+# Only on an installed Aurora system: an image build runs update-grub before
+# finalize-image hardens GRUB itself and writes image-format.
+if [ -x /usr/lib/aurora/aurora-harden-grub ] && [ -f /usr/lib/aurora/image-format ] && mountpoint -q /boot/efi; then
+	/usr/lib/aurora/aurora-harden-grub --flavor arch ||
+		echo "update-grub: aurora-harden-grub failed; GRUB may search other disks at the next boot" >&2
+fi

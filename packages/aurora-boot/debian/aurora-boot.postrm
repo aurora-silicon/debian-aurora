@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+# Give Debian's update-grub its name back.
+case "$1" in
+    remove|abort-install|disappear)
+        dpkg-divert --package aurora-boot --divert /usr/sbin/update-grub.debian \
+            --rename --remove /usr/sbin/update-grub
+        ;;
+    abort-upgrade)
+        if dpkg --compare-versions "$2" lt 20261018.3; then
+            dpkg-divert --package aurora-boot --divert /usr/sbin/update-grub.debian \
+                --rename --remove /usr/sbin/update-grub
+        fi
+        ;;
+esac
+
+exit 0

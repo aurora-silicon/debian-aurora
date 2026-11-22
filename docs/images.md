@@ -81,6 +81,7 @@ At the end, the build runs two checks, and the finalizer runs the same two:
 
 - The initrd is built by dracut, with `aurora-boot`'s dracut modules (alarm-aurora uses mkinitcpio). `aurora-boot` omits dracut's busybox module, which the desktops' recommendations would otherwise pull in. Its applet links replace util-linux's `lsblk` and the full `awk` that `aurora-initrd-root` needs. It is written to Debian's `/boot/initrd.img-<kernel>`, and the finalizer regenerates it with its `aurora-root` module.
 - `/etc/default/grub` starts from `grub2-common`'s template, and `update-grub` writes `/boot/grub/grub.cfg`. Debian's GRUB has Arch's layout, so the finalizer hardens it with `harden-grub.py`'s `arch` flavour, and `check-basics.py --esp` checks the same files as on alarm-aurora.
+- Debian runs `update-grub` on every kernel installation and removal, and a regenerated `grub.cfg` loses that hardening. alarm-aurora's GRUB configuration doesn't change with the kernel. `aurora-boot` diverts Debian's `update-grub` to `update-grub.debian` and installs one that runs it and then `aurora-harden-grub --flavor arch`. That covers the kernel hooks, the packages that call `update-grub`, and the owner's own runs. `grub-efi-arm64-bin` never runs `grub-install`, so GRUB updates leave the hardened core image alone.
 
 ### Image checks
 
