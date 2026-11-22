@@ -189,6 +189,11 @@ printf 'LANG=en_US.UTF-8\n' > "$mountroot/etc/locale.conf"
 # aurora-firstboot creates the owner in it.
 chroot "$mountroot" groupadd --system wheel
 chroot "$mountroot" usermod -L root
+# The desktops' setups (Plasma's, and GNOME's through accountsservice) create
+# the owner with useradd's default shell, which Debian sets to /bin/sh;
+# aurora-firstboot gives the owner bash, so the desktops do too.
+sed -i 's|^SHELL=/bin/sh$|SHELL=/bin/bash|' "$mountroot/etc/default/useradd"
+grep -qx 'SHELL=/bin/bash' "$mountroot/etc/default/useradd"
 rm -f "$mountroot/etc/ssh/"ssh_host_* "$mountroot/var/lib/systemd/random-seed" "$mountroot/etc/hostname"
 printf 'uninitialized\n' > "$mountroot/etc/machine-id"
 # Debian's ssh.service expects host keys; create them when the owner first
