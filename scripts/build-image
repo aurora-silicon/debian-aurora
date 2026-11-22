@@ -225,7 +225,12 @@ case $desktop in
   # the display's scale.
   kde) chroot "$mountroot" systemctl enable plasmalogin.service plasma-setup.service
     chroot "$mountroot" systemctl set-default graphical.target;;
-  gnome) chroot "$mountroot" systemctl enable gdm.service
+  # gdm3's maintainer script links display-manager.service to the gdm3.service
+  # alias. GDM starts through it, but systemd doesn't count gdm.service as
+  # enabled, and enable keeps a link it resolves to the unit; disabling first
+  # replaces it with gdm.service's own link.
+  gnome) chroot "$mountroot" systemctl disable gdm.service
+    chroot "$mountroot" systemctl enable gdm.service
     chroot "$mountroot" systemctl set-default graphical.target;;
   *) chroot "$mountroot" systemctl set-default multi-user.target;;
 esac
