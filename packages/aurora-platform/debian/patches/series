@@ -1,1 +1,2 @@
 0001-firstboot-debian-initrd-names.patch
+0002-harden-grub-replace-the-core-only-when-it-changes.patch

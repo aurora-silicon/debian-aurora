@@ -1,8 +1,8 @@
 {
   "source": "aurora-platform",
-  "version": "0.1.13-1",
+  "version": "0.1.13-2",
   "kind": "upstream",
   "upstream": {"pin": "aurora-firstboot"},
-  "changes": "Aurora's shared first boot (root encryption and owner setup), power budget, GameMode defaults and secure-boot tooling, at alarm-aurora's pin, with the dracut initrd integration and Debian's kernel hooks.\nRecognise Debian's initrd names when the console keymap changes (aurora-platform's Debian support, carried as a patch until the pin includes it).",
+  "changes": "Aurora's shared first boot (root encryption and owner setup), power budget, GameMode defaults and secure-boot tooling, at alarm-aurora's pin, with the dracut initrd integration and Debian's kernel hooks.\nRecognise Debian's initrd names when the console keymap changes (aurora-platform's Debian support, carried as a patch until the pin includes it).\naurora-harden-grub replaces GRUB's core image only when its bytes change, as aurora-boot now reapplies it after every update-grub (carried as a patch, as above).",
   "alarm": ["aurora-firstboot", "aurora-power-budget", "aurora-gamemode", "aurora-secboot"]
 }
