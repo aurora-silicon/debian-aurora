@@ -135,9 +135,10 @@ to save emulation time; the native CI build runs the test suites.
 - Tracking: unstable uploads a new Firefox about every four weeks, and each
   one needs a version bump here (alarm-aurora's track-firefox workflow does
   the same for ALARM's). Not automated yet.
-- Open: hardware decoding through libva-v4l2-request has to be checked on a
-  Mac (`about:support`, `MOZ_LOG=PlatformDecoderModule:5,FFmpegVideo:5`, as
-  docs/avd-vaapi.md in alarm-aurora describes).
+- Hardware decoding: checked on a MacBook Air (M1, J313) running a
+  debian-minimal install with an X session: `about:support` reports hardware
+  video decoding through VA-API (libva-v4l2-request) with the patched RDD
+  sandbox.
 
 ### gtk+2.0 (gtk2): debian
 
