@@ -1,6 +1,6 @@
 {
   "source": "aurora-boot",
-  "version": "20261018.1",
+  "version": "20261018.2",
   "kind": "native",
   "changes": "Aurora Debian boot integration: the initrd (dracut) contents and order of alarm-aurora's mkinitcpio hooks, GRUB settings, and the image's unit presets.",
   "alarm": ["aurora-boot"],
