@@ -9,7 +9,7 @@ Rules-Requires-Root: no
 
 Package: aurora-boot
 Architecture: all
-Depends: dracut, grub-efi-arm64-bin, grub2-common, asahi-scripts, aura (>= 1.0.0~b13),
+Depends: dracut, zstd, grub-efi-arm64-bin, grub2-common, asahi-scripts, aura (>= 1.0.0~b13),
  linux-image-aurora (>= 7.3.0-1), uboot-aurora, aurora-firmware, aurora-firstboot, aurora-power-budget,
  aurora-neo-platform-config, aurora-m5-platform-config, speakersafetyd-aurora-profiles,
  aurora-archive-keyring, ${misc:Depends}
