@@ -179,11 +179,13 @@ printf 'LANG=en_US.UTF-8\n' > "$mountroot/etc/locale.conf"
 # desktop layout from here (aurora-platform).
 [[ -s $mountroot/etc/vconsole.conf ]] || printf 'KEYMAP=us\n' > "$mountroot/etc/vconsole.conf"
 
-# Images carry no account, no machine identity and no host keys. Debian has
-# no wheel group; aurora-firstboot creates the owner in it.
+# Images carry no account, no machine identity and no host keys; mmdebstrap
+# copies the build host's /etc/hostname, so it goes too (aurora-firstboot or
+# the desktop's setup names the Mac). Debian has no wheel group;
+# aurora-firstboot creates the owner in it.
 chroot "$mountroot" groupadd --system wheel
 chroot "$mountroot" usermod -L root
-rm -f "$mountroot/etc/ssh/"ssh_host_* "$mountroot/var/lib/systemd/random-seed"
+rm -f "$mountroot/etc/ssh/"ssh_host_* "$mountroot/var/lib/systemd/random-seed" "$mountroot/etc/hostname"
 printf 'uninitialized\n' > "$mountroot/etc/machine-id"
 # Debian's ssh.service expects host keys; create them when the owner first
 # enables remote login. A drop-in's ExecStartPre= runs after the unit's own,
