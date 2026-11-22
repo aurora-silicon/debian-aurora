@@ -313,6 +313,11 @@ PY
   finalizer=$(echo "$root"/out/finalizer/aurora-platform-*)
 fi
 bash "$finalizer/images/finalize-image" "$image" "$profile" "$root/out/$profile-installer"
+# aurora-initrd-root needs util-linux's lsblk (and a full awk) in the initrd:
+# no busybox applet may stand in for them.
+if grep -q -- ' -> busybox$' "$root/out/$profile-installer/initramfs-inventory.txt"; then
+  echo "the initrd contains busybox applets" >&2; exit 1
+fi
 # A Stage 1 with the CTXR window chainloads these, on Mach-O Macs.
 if $monitor_free; then
   python3 "$root/scripts/prepare-ctxr-stage2.py" "$root/out/$profile-installer/esp/m1n1"
