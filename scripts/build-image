@@ -186,9 +186,12 @@ chroot "$mountroot" usermod -L root
 rm -f "$mountroot/etc/ssh/"ssh_host_* "$mountroot/var/lib/systemd/random-seed"
 printf 'uninitialized\n' > "$mountroot/etc/machine-id"
 # Debian's ssh.service expects host keys; create them when the owner first
-# enables remote login.
+# enables remote login. A drop-in's ExecStartPre= runs after the unit's own,
+# and Debian's `sshd -t` fails without host keys, so the list is replaced with
+# key generation first. (sshd-keygen.service runs only on a first boot.)
 install -d -m 0755 "$mountroot/etc/systemd/system/ssh.service.d"
-printf '[Service]\nExecStartPre=/usr/bin/ssh-keygen -A\n' > "$mountroot/etc/systemd/system/ssh.service.d/10-aurora-host-keys.conf"
+printf '[Service]\nExecStartPre=\nExecStartPre=/usr/bin/ssh-keygen -A\nExecStartPre=/usr/sbin/sshd -t\n' \
+  > "$mountroot/etc/systemd/system/ssh.service.d/10-aurora-host-keys.conf"
 
 # An install's first boot applies every preset in enable-only mode. Apply
 # them here, so the image already has what they enable.
