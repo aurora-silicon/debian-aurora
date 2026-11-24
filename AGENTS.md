@@ -1,11 +1,10 @@
 # debian-aurora: contributor notes
 
-For everyone who changes this repository, human or agent. Aurora Silicon's contributor policy applies; these are the repository's own conventions.
+For everyone who changes this repository, human or agent. Aurora Silicon's rulebook ([aurora-silicon/agent-guidelines](https://github.com/aurora-silicon/agent-guidelines)) applies; these are the repository's own notes.
 
 ## Commits and pull requests
 
-- Commits carry human identity only. Agents never co-author, sign off or co-commit, so a commit has no `Co-Authored-By`, no agent `Signed-off-by`, no `Assisted-by` and no session trailers.
-- When an agent helped, the last line of the pull request body says so, and only there: `Assisted-by: LLM (<Vendor>:<Model>)`.
+- Commits carry the human author and a human `Signed-off-by` (DCO) only. No AI attribution anywhere (`Assisted-by`, `Co-Authored-By` naming a tool, agent `Signed-off-by`, "Generated with" lines, model or tool names, or session links) in commits, PR titles and bodies, comments or reviews. See [`policy/pr-structure.md`](https://github.com/aurora-silicon/agent-guidelines/blob/main/policy/pr-structure.md).
 
 ## Packages
 
