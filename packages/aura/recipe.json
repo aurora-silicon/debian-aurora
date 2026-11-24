@@ -1,6 +1,6 @@
 {
   "source": "aura",
-  "version": "1.0.0~b14.1-1",
+  "version": "1.0.0~b17-1",
   "kind": "upstream",
   "upstream": {"pin": "aura"},
   "network": true,

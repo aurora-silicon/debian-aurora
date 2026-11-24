@@ -1,6 +1,6 @@
 {
   "source": "aurora-flatpak-gl",
-  "version": "26.3.0~devel.202611150611.d4ad4a4dce6-1",
+  "version": "26.3.0~devel.202611242205.9a21c0c6220-1",
   "kind": "upstream",
   "upstream": {"pin": "mesa-aurora"},
   "network": true,

@@ -10,7 +10,7 @@ export RUSTUP_HOME := $(CURDIR)/debian/.rustup
 export CARGO_HOME := $(CURDIR)/debian/.cargo
 export PATH := $(CARGO_HOME)/bin:$(PATH)
 export RUSTUP_TOOLCHAIN := $(RUST)
-AURA_MAKE = $(MAKE) -j$(or $(JOBS),1) RELEASE=1 CHAINLOADING=1 USE_CLANG=1 BUILTIN_LOGO=aurora
+AURA_MAKE = $(MAKE) -j$(or $(JOBS),1) RELEASE=1 CHAINLOADING=1 USE_CLANG=1 BUILTIN_LOGO=aurora EXTRA_CFLAGS=-Oz
 STAGE1 := debian/stage1
 
 %:

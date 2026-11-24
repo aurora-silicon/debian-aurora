@@ -5,9 +5,9 @@ packages. Debian versions are testing's at snapshot 20261120T000000Z.
 
 | alarm-aurora | Debian source → binaries | Kind | Version | Status |
 | --- | --- | --- | --- | --- |
-| mesa-aurora, vulkan-aurora, opencl-rusticl-aurora, vulkan-lavapipe-aurora | mesa → libgl1-mesa-dri, libegl-mesa0, libglx-mesa0, libgbm1, libgbm-dev, mesa-libgallium, mesa-vulkan-drivers, mesa-opencl-icd, mesa-common-dev, libegl1-mesa-dev, libgl1-mesa-dev, libgles2-mesa-dev, mesa-va-drivers, mesa-vdpau-drivers | upstream (mesa-aurora pin, Debian's 26.1.6-1 packaging) | 26.3.0~devel.202611150611.d4ad4a4dce6-1 | built (cross: everything but Rusticl and lavapipe, see below) |
-| mesa-aurora-fex-guest | mesa-aurora-fex-guest → same (Architecture: all, x86_64 payload) | upstream (mesa-aurora-fex-guest pin) | 26.3.0~devel.202611150611.d4ad4a4dce6-1 | built (cross, on the amd64 build machine); x86_64 only, the i686 half is missing (below) |
-| aurora-flatpak-gl | aurora-flatpak-gl → same | upstream (mesa-aurora pin, network) | 26.3.0~devel.202611150611.d4ad4a4dce6-1 | recipe; build blocked by the build root (flatpak-builder's bubblewrap cannot create namespaces inside sbuild's chroot) |
+| mesa-aurora, vulkan-aurora, opencl-rusticl-aurora, vulkan-lavapipe-aurora | mesa → libgl1-mesa-dri, libegl-mesa0, libglx-mesa0, libgbm1, libgbm-dev, mesa-libgallium, mesa-vulkan-drivers, mesa-opencl-icd, mesa-common-dev, libegl1-mesa-dev, libgl1-mesa-dev, libgles2-mesa-dev, mesa-va-drivers, mesa-vdpau-drivers | upstream (mesa-aurora pin, Debian's 26.1.6-1 packaging) | 26.3.0~devel.202611242205.9a21c0c6220-1 | built (cross: everything but Rusticl and lavapipe, see below) |
+| mesa-aurora-fex-guest | mesa-aurora-fex-guest → same (Architecture: all, x86_64 payload) | upstream (mesa-aurora-fex-guest pin) | 26.3.0~devel.202611242205.9a21c0c6220-1 | built (cross, on the amd64 build machine); x86_64 only, the i686 half is missing (below) |
+| aurora-flatpak-gl | aurora-flatpak-gl → same | upstream (mesa-aurora pin, network) | 26.3.0~devel.202611242205.9a21c0c6220-1 | recipe; build blocked by the build root (flatpak-builder's bubblewrap cannot create namespaces inside sbuild's chroot) |
 | libva-v4l2-request-avd | libva-v4l2-request → same | upstream (libva-v4l2-request-avd pin) | 1.3+r11.g4f60c51-1 | built (cross) |
 | avd-fw | avd-fw → same (Architecture: all) | upstream (avd-fw pin) | 0.1.aurora4-1 | built (cross); all eight images match the clang 22 hash manifest |
 | fex-emu, fex-emu-steam | fex-emu → fex-emu, fex-emu-config, fex-emu-steam | upstream (`{"git": "fex-emu", "submodules": true}`) | 2610+git202611061239.0c08727ae4c-1 | built (cross: fex-emu and fex-emu-steam; fex-emu-config is native-only) |
@@ -15,7 +15,7 @@ packages. Debian versions are testing's at snapshot 20261120T000000Z.
 
 ## mesa
 
-Aurora's Mesa (aurora-silicon/mesa d4ad4a4dce6, VERSION 26.3.0-devel) with
+Aurora's Mesa (aurora-silicon/mesa 9a21c0c6220, VERSION 26.3.0-devel) with
 Debian testing's mesa 26.1.6-1 `debian/` directory adapted to it. Every
 Debian binary package name that applies is kept, at a version above
 26.1.6-1, so Debian's reverse dependencies stay satisfied and apt upgrades
@@ -45,7 +45,7 @@ those compilers. Driver selection and options are alarm-aurora's
 -Dexpat=enabled -Dzstd=enabled -Dlmsensors=enabled -Dlibunwind=disabled
 -Dvalgrind=disabled`). MESA_GIT_SHA1_OVERRIDE is the pinned commit (read from
 `debian/aurora-pin`). alarm-aurora's checks run in every build: the Borealis
-driverInfo names the commit (`(git-d4ad4a4dce), Borealis`), Rusticl and
+driverInfo names the commit (`(git-9a21c0c622), Borealis`), Rusticl and
 lavapipe are AArch64, lavapipe's manifest names its library, and no other
 library has a NEEDED libLLVM or libSPIRV-Tools. Mesa's meson tests (the
 native tree's) gate the build (`dh_auto_test` without Debian's `-`), as they
