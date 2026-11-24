@@ -27,9 +27,13 @@ jobs:
           persist-credentials: false
       - name: Unit tests and recipes
         run: bash scripts/test
-      - name: Shell syntax
+      - name: Script syntax
         run: |
           for file in scripts/*; do
-            [[ -f $file && $file != *.py ]] || continue
-            bash -n "$file"
+            [[ -f $file ]] || continue
+            IFS= read -r shebang < "$file" || true
+            case $shebang in
+              *python*) python3 -m py_compile "$file" ;;
+              *sh*) bash -n "$file" ;;
+            esac
           done
