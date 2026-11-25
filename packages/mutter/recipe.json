@@ -1,9 +1,9 @@
 {
   "source": "mutter",
-  "version": "51.0-3+aurora1",
+  "version": "51.0-3+aurora2",
   "kind": "rebuild",
   "debian": {"source": "mutter", "version": "51.0-3"},
-  "changes": "Make the variable refresh rate variant the preferred mode of a VRR-capable output, so new monitor configurations use it.\nTake the PQ reference white from the connector's PQ_REFERENCE_LUMINANCE property when it has one, and keep the backlight as the brightness control in BT.2100 mode.\nKeep variable refresh rate on for the whole desktop of a built-in panel in a variable refresh rate mode.\nDrop the renderer's power save page flip onscreens on dispose, so gnome-shell does not crash at shutdown while outputs are in power save.\nUpdate right away when even the frame clock's minimum update time estimate is too late, so clients drawing every frame keep the full refresh rate.\nThe same five patches as alarm-aurora's mutter-aurora and fedora-aurora's mutter.",
+  "changes": "Make the variable refresh rate variant the preferred mode of a VRR-capable output, so new monitor configurations use it.\nTake the PQ reference white from the connector's PQ_REFERENCE_LUMINANCE property when it has one, and keep the backlight as the brightness control in BT.2100 mode.\nKeep variable refresh rate on for the whole desktop of a built-in panel in a variable refresh rate mode.\nDrop the renderer's power save page flip onscreens on dispose, so gnome-shell does not crash at shutdown while outputs are in power save.\nUpdate right away when even the frame clock's minimum update time estimate is too late, so clients drawing every frame keep the full refresh rate.\nApply the touchpad scroll-speed setting (org.gnome.desktop.peripherals.touchpad scroll-speed) to touchpad finger scrolling; 1.0 keeps the old behaviour.\nThe same six patches as alarm-aurora's mutter-aurora and fedora-aurora's mutter.",
   "alarm": ["mutter-aurora"],
   "notes": "alarm-aurora's patches apply unchanged to 51.0 (with line offsets only). alarm-aurora's -O3 and -Bsymbolic-functions flags and its removal of the development kit are Arch packaging choices and are not carried; Debian's packaging is kept."
 }
