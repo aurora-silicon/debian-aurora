@@ -55,8 +55,13 @@ jobs:
           docker run --rm --privileged -v "$PWD:/src" -w /src -e PACKAGE -e CROSS -e BUILDER_UID="$(id -u)" \
             debian:testing bash -euo pipefail -c '
               apt-get update -qq
+              extra_pkgs=()
+              if [[ $PACKAGE == aurora-flatpak-gl ]]; then
+                extra_pkgs=(binutils bubblewrap dbus-daemon elfutils flatpak flatpak-builder libarchive-tools ostree zstd)
+              fi
               DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates \
-                debian-archive-keyring dpkg-dev git mmdebstrap patch python3 sbuild uidmap xz-utils >/dev/null
+                debian-archive-keyring dpkg-dev git mmdebstrap patch python3 sbuild uidmap xz-utils \
+                "${extra_pkgs[@]}" >/dev/null
               # The unshare backend runs as an ordinary user with subordinate IDs.
               useradd --create-home --uid "$BUILDER_UID" builder
               usermod --add-subuids 100000-165535 --add-subgids 100000-165535 builder
@@ -68,6 +73,15 @@ jobs:
           find out/packages -maxdepth 1 -type f ! -name '*.build' -printf '%f\n' | sort |
             comm -13 "$RUNNER_TEMP/inputs" - | while read -r file; do mv "out/packages/$file" out/built/; done
           ls -l out/built
+      - name: Capture sbuild log on failure
+        if: failure()
+        run: |
+          log=$(find out/packages -maxdepth 1 -type f -name '*.build' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n 1 | cut -d' ' -f2-)
+          if [[ -n ${log:-} && -f $log ]]; then
+            cp "$log" sbuild.log
+            echo "=== Tail of $log ==="
+            tail -n 120 sbuild.log
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: success()
         with:
@@ -76,10 +90,12 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
-      # A failed attempt keeps its log under a name later levels never read.
+      # A failed attempt keeps its logs under a name later levels never read.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
           name: failed-${{ matrix.package.name }}-attempt-${{ github.run_attempt }}
-          path: build.log
+          path: |
+            build.log
+            sbuild.log
           retention-days: 14

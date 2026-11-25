@@ -19,4 +19,6 @@ for branch in "$@"; do
 		"org.freedesktop.Sdk/aarch64/$branch" \
 		"org.freedesktop.Sdk.Extension.llvm22/aarch64/$branch"
 	bash "$here/build-extension.sh" "$branch" "$repo" "$workdir/work-$branch"
+	# Free this branch's unpacked build tree before starting the next branch.
+	rm -rf "$workdir/work-$branch"
 done

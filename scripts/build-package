@@ -61,9 +61,52 @@ flock -u 9
 
 packages=${AURORA_PACKAGES_DIR:-$root/out/packages}
 mkdir -p "$packages"
+flatpak_stage=''
+cleanup_flatpak_stage() {
+  if [[ -n ${flatpak_stage:-} && -d $flatpak_stage ]]; then
+    rm -rf "$flatpak_stage"
+  fi
+}
+trap cleanup_flatpak_stage EXIT
 for name in "${names[@]}"; do
   work=$root/out/work/$name
-  dsc=$(python3 "$root/scripts/recipe.py" prepare "$name" "$work")
+  prepare_args=()
+  prebuild_repo_tar=''
+  flatpak_stage=''
+  # flatpak-builder's bubblewrap cannot create user namespaces inside sbuild's
+  # chroot; build its OSTree repository outside sbuild and attach it as an
+  # orig-repo component tarball so sbuild validates and packages it cleanly.
+  if [[ -f $root/packages/$name/debian/gl/build-repository.sh ]]; then
+    read -r mesa_commit mesa_archive mesa_suffix < <(python3 "$root/scripts/recipe.py" fetch "$name")
+    flatpak_stage=$(mktemp -d "${TMPDIR:-/tmp}/aurora-flatpak-gl.XXXXXX")
+    flatpak_state=$flatpak_stage/state
+    flatpak_repo=$flatpak_stage/repo
+    flatpak_work=$flatpak_stage/work
+    flatpak_archive=$flatpak_stage/mesa$mesa_suffix
+    ln -s "$mesa_archive" "$flatpak_archive"
+    mkdir -p "$flatpak_state/home" "$flatpak_state/data" "$flatpak_state/cache" "$flatpak_state/config"
+    install -d -m700 "$flatpak_state/runtime"
+    echo "Building Flatpak GL repository for $name (Mesa ${mesa_commit:0:10})"
+    env \
+      HOME="$flatpak_state/home" \
+      XDG_DATA_HOME="$flatpak_state/data" \
+      XDG_CACHE_HOME="$flatpak_state/cache" \
+      XDG_CONFIG_HOME="$flatpak_state/config" \
+      XDG_RUNTIME_DIR="$flatpak_state/runtime" \
+      AURORA_MESA_COMMIT="$mesa_commit" \
+      AURORA_MESA_ARCHIVE="$flatpak_archive" \
+      AURORA_BUILD_JOBS="$jobs" \
+      dbus-run-session -- sh -e "$root/packages/$name/debian/gl/build-repository.sh" \
+        "$flatpak_repo" "$flatpak_work" 25.08 26.08
+    prebuild_repo_tar=$flatpak_stage/repo.tar.gz
+    GZIP=-1 tar -C "$flatpak_stage" -czf "$prebuild_repo_tar" repo
+    rm -rf "$flatpak_state" "$flatpak_work" "$flatpak_repo"
+    prepare_args+=(--component "repo=$prebuild_repo_tar")
+  fi
+  dsc=$(python3 "$root/scripts/recipe.py" prepare "$name" "$work" "${prepare_args[@]}")
+  if [[ -n $flatpak_stage ]]; then
+    rm -rf "$flatpak_stage"
+  fi
   network=$(python3 "$root/scripts/recipe.py" field "$name" network)
   cross_ok=$(python3 "$root/scripts/recipe.py" field "$name" cross)
   build_on=$(python3 "$root/scripts/recipe.py" field "$name" build_on)
@@ -82,8 +125,13 @@ for name in "${names[@]}"; do
     options+=(--arch=arm64)
   fi
   # Pinned toolchains (rustup) and vendored dependencies are fetched by the
-  # build itself; their recipes say so.
-  [[ $network == true ]] && options+=(--enable-network) || options+=(--no-enable-network)
+  # build itself; their recipes say so. When the Flatpak repo was already
+  # built outside sbuild, keep the sbuild session offline.
+  if [[ $network == true && -z $prebuild_repo_tar ]]; then
+    options+=(--enable-network)
+  else
+    options+=(--no-enable-network)
+  fi
   echo "Building $name from ${dsc#"$root/"}"
   sbuild "${options[@]}" "$dsc"
 done
