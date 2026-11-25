@@ -25,5 +25,5 @@
 
 ## Open
 
-- The archive key is a temporary test key (packages/aurora-archive-keyring/keys/README.md); the Aurora maintainers replace it before the first release.
+- The archive key is the production Aurora Debian Archive Signing Key (`EC1D8379B48ADD58D5C8A74E52BF31CC0019FCFE`, see `packages/aurora-archive-keyring/keys/README.md`).
 - Hardware: nothing here has booted a Mac. The kernel and boot chain were built from source only.

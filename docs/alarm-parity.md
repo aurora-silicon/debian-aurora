@@ -15,7 +15,7 @@ Details and deviations: [parity/boot.md](parity/boot.md). Stage 2 composed from 
 | aurora-boot | aurora-boot | native | built |
 | aurora-firmware | aurora-firmware | native | built |
 | aurora-firstboot (+power-budget, gamemode, secboot) | aurora-platform | upstream | built |
-| aurora-keyring | aurora-archive-keyring | native | built (temporary test key) |
+| aurora-keyring | aurora-archive-keyring | native | built (production archive key) |
 
 ## Graphics, video and x86 compatibility
 
