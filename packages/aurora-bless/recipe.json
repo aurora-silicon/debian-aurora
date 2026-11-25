@@ -1,6 +1,6 @@
 {
   "source": "aurora-bless",
-  "version": "0.4.4.aurora5-1",
+  "version": "0.4.4.aurora6-1",
   "kind": "upstream",
   "upstream": {"pin": "aurora-bless"},
   "network": true,
