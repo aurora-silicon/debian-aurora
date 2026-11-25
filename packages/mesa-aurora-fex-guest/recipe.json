@@ -1,11 +1,11 @@
 {
   "source": "mesa-aurora-fex-guest",
-  "version": "26.3.0~devel.202611150611.d4ad4a4dce6-1",
+  "version": "26.3.0~devel.202611242205.9a21c0c6220-1",
   "kind": "upstream",
   "upstream": {
     "pin": "mesa-aurora-fex-guest"
   },
-  "changes": "Aurora's x86_64 Mesa (aurora-silicon/mesa d4ad4a4dce6, the same commit as the host mesa) as the FEX guest graphics layer, laid out for Debian and Ubuntu root filesystems, and aurora-fex-mesa.service, which lays it over FEX's stock guest root filesystem.",
+  "changes": "Aurora's x86_64 Mesa (aurora-silicon/mesa 9a21c0c6220, the same commit as the host mesa) as the FEX guest graphics layer, laid out for Debian and Ubuntu root filesystems, and aurora-fex-mesa.service, which lays it over FEX's stock guest root filesystem.",
   "alarm": [
     "mesa-aurora-fex-guest"
   ],
