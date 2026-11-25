@@ -176,10 +176,18 @@ ifneq ($(CROSS_PROFILE),yes)
 		debian/tmp/$(LIBDIR)/
 	install -m644 build-tools/src/gallium/targets/lavapipe/lvp_icd.json \
 		debian/tmp/usr/share/vulkan/icd.d/
-	# The LLVM tree's libraries are AArch64 and lavapipe's manifest names
-	# its library.
+	# Libraries copied directly from build-tools bypass meson install, which
+	# would strip the build-tree DT_RUNPATH (/usr/lib/llvm-21/lib). Strip it
+	# here so dpkg-shlibdeps resolves libLLVM.so.21.1 via libllvm21 in
+	# /usr/lib/$(DEB_HOST_MULTIARCH) instead of llvm-21-dev's symlink.
 	for f in debian/tmp/$(LIBDIR)/libRusticlOpenCL.so.1.0.0 \
 		debian/tmp/$(LIBDIR)/libvulkan_lvp.so; do \
+		if LC_ALL=C readelf -d $$f | grep -Eq 'RPATH|RUNPATH'; then \
+			chrpath -d $$f; \
+		fi; \
+		if LC_ALL=C readelf -d $$f | grep -Eq 'RPATH|RUNPATH'; then \
+			echo "Unexpected RPATH/RUNPATH in $$f" >&2; exit 1; \
+		fi; \
 		readelf -h $$f | grep -q 'Machine:.*AArch64' || exit 1; \
 	done
 	grep -F '"library_path": "libvulkan_lvp.so"' \
