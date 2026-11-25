@@ -1,6 +1,6 @@
 {
   "source": "aurora-speaker-upgrade",
-  "version": "0.1-3",
+  "version": "0.1-4",
   "kind": "upstream",
   "upstream": {"pin": "aurora-speaker-upgrade"},
   "changes": "aurora-speaker-upgrade, which moves a Mac's speakers from the legacy protection to speakerguardd v2 with that Mac's own tuning only when the silent self-check passes, and back with --revert. speakerguardd v2 is opt in: the boot unit is installed disabled (alarm-aurora's preset enables it), and the user runs aurora-speaker-upgrade.\nA notice at console and SSH logins and once per user in the desktop says, while speakersafetyd or speakerguardd 0.1 holds the speakers, that this legacy protection is deprecated and asks the user to bring up speakerguardd v2 and report the result.\nThe desktop notice waits for the session's notification service (gdbus wait), so it also appears in GNOME, whose shell registers the service after autostart applications start.\nThe description and README.Debian name the system \"Aurora, based on Debian testing\".",

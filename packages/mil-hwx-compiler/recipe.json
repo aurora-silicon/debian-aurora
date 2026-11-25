@@ -1,10 +1,10 @@
 {
   "source": "mil-hwx-compiler",
-  "version": "0.3.1-1",
+  "version": "0.3.4-1",
   "kind": "upstream",
   "upstream": {"pin": "mil-hwx-compiler"},
   "cross": false,
-  "changes": "The open MIL to Apple Neural Engine HWX and ANEC compiler (mil-hwxc v0.3.1) with its private libobjc2 and GNUstep Base from the pinned sources, as alarm-aurora's mil-hwx-compiler 0.3.1-1; the H13 software suite and the H14 fixture hash run at build time.",
+  "changes": "The open MIL to Apple Neural Engine HWX and ANEC compiler (mil-hwxc v0.3.4) with its private libobjc2 and GNUstep Base from the pinned sources, as alarm-aurora's mil-hwx-compiler 0.3.4-1; the H13 software suite and the H14 fixture hash run at build time.",
   "alarm": ["mil-hwx-compiler"],
   "notes": "Needs the pin's extra sources libobjc2, gnustep-make and gnustep-base as component tarballs (orig-<key>, unpacked in <key>/), which scripts/recipe.py does not provide yet: prepare fails at the GNUstep Base patch until it does (see docs/parity/apps.md). Not cross-buildable: the build runs the compiler it builds. sources.json marks the archives redistribute_source: false; the source package must not be published until the framework honours that flag."
 }

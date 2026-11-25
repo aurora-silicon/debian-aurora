@@ -2,7 +2,8 @@ Source: aurora-wifi-firmware
 Section: admin
 Priority: optional
 Maintainer: Aurora Silicon <noreply@aurorasilicon.org>
-Build-Depends: debhelper-compat (= 13), python3:native <!nocheck>
+Build-Depends: debhelper-compat (= 13)
+Build-Depends-Indep: python3 <!nocheck>, python3-cryptography <!nocheck>
 Standards-Version: 4.7.2
 Homepage: https://github.com/aurora-silicon/aurora-installer/tree/main/tools/wifi-firmware
 Rules-Requires-Root: no
@@ -10,7 +11,7 @@ Rules-Requires-Root: no
 Package: aurora-wifi-firmware
 Architecture: all
 Multi-Arch: foreign
-Depends: python3, util-linux, mount, systemd, ${misc:Depends}
+Depends: python3, python3-cryptography, util-linux, mount, systemd, ${misc:Depends}
 Recommends: liblzfse1
 Description: Wi-Fi and Bluetooth firmware from the installed macOS (Aurora)
  macOS runs the Wi-Fi and Bluetooth firmware its system volume ships. At every
