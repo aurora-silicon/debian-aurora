@@ -115,7 +115,7 @@ packages=(aurora-archive-keyring linux-image-aurora aurora-userpages aurora-boot
   aura uboot-aurora asahi-scripts grub-efi-arm64-bin grub2-common dracut cryptsetup-bin systemd-cryptsetup
   btrfs-progs python3 network-manager wpasupplicant bluez wireless-regdb firmware-linux aurora-sep fprintd libpam-fprintd
   avd-fw libva-v4l2-request upower mesa-vulkan-drivers libgl1-mesa-dri libegl-mesa0 mesa-aurora-fex-guest
-  aurora-flatpak-gl aurora-system-fixes aurora-logos aurora-audio alsa-utils alsa-ucm-conf-aurora aurora-bless
+  aurora-system-fixes aurora-logos aurora-audio alsa-utils alsa-ucm-conf-aurora aurora-bless
   aurora-nvram aurora-btsync aurora-panel-nits aurora-camera-denoise aurora-kbd-light aurora-wifi-firmware lzfse
   aurora-fido aurora-sep-sk tiny-dfr pipewire-pulse pipewire-alsa openssh-server openssh-client)
 # alarm-aurora's linux-firmware includes the Realtek, MediaTek and Atheros
@@ -138,6 +138,11 @@ case $desktop in
       gnome-backgrounds plymouth plymouth-theme-aurora gamemode aurora-gamemode);;
 esac
 chroot "$mountroot" apt-get update
+# aurora-flatpak-gl cannot yet be built inside sbuild (docs/parity/graphics.md);
+# install it when the repository provides it.
+if chroot "$mountroot" apt-cache show aurora-flatpak-gl >/dev/null 2>&1; then
+  packages+=(aurora-flatpak-gl)
+fi
 attempt=1
 until chroot "$mountroot" env DEBIAN_FRONTEND=noninteractive apt-get install -y "$recommends" "${packages[@]}"; do
   (( attempt++ < 3 ))
