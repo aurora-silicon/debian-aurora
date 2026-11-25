@@ -1,6 +1,6 @@
 {
   "source": "aurora-archive-keyring",
-  "version": "2026.11.2",
+  "version": "2026.11.3",
   "kind": "native",
   "changes": "The archive signing key of Aurora's Debian testing packages and the apt pin that lets Aurora's builds replace Debian's packages of the same name.\nThe description calls them Aurora's Debian testing packages.",
   "alarm": ["aurora-keyring"],
