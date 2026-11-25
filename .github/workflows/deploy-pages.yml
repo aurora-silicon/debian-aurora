@@ -3,16 +3,16 @@ on:
   workflow_dispatch:
     inputs:
       testing-tag:
-        description: Signed snapshot release tag to serve at /testing/ (e.g. testing-20261125.5)
-        required: true
+        description: Optional signed snapshot release tag to serve at /testing/ (blank auto-resolves latest)
+        default: ''
       nightly-tag:
-        description: Optional signed snapshot release tag to serve at /nightly/
+        description: Optional signed snapshot release tag to serve at /nightly/ (blank auto-resolves latest)
         default: ''
       stable-tag:
-        description: Optional signed snapshot release tag to serve at /stable/
+        description: Optional signed snapshot release tag to serve at /stable/ (blank auto-resolves latest)
         default: ''
       edge-tag:
-        description: Optional signed snapshot release tag to serve at /edge/
+        description: Optional signed snapshot release tag to serve at /edge/ (blank auto-resolves latest)
         default: ''
       dry-run:
         description: Verify signatures and assemble site/ without deploying to GitHub Pages
@@ -22,7 +22,7 @@ on:
     inputs:
       testing-tag:
         type: string
-        required: true
+        default: ''
       nightly-tag:
         type: string
         default: ''
@@ -78,10 +78,43 @@ jobs:
           touch site/.nojekyll
           cp packages/aurora-archive-keyring/keys/aurora-debian-archive.asc site/aurora-debian-archive.asc
 
+          releases_json="$RUNNER_TEMP/releases.json"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
+            | jq 'add // []' > "$releases_json"
+
+          resolve_channel_tag() {
+            local channel=$1 explicit=$2
+            if [[ -n $explicit ]]; then
+              printf '%s\n' "$explicit"
+              return 0
+            fi
+            jq -r --arg ch "$channel" '
+              [ .[]
+                | select((.draft | not)
+                    and (.tag_name | test("^" + $ch + "-[0-9]{8}\\.[0-9]+$"))
+                    and any(.assets[]?; .name == "debian-aurora-repository.tar"))
+                | .tag_name
+              ]
+              | map({
+                  tag: .,
+                  date: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .d | tonumber),
+                  seq: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .n | tonumber)
+                })
+              | sort_by(.date, .seq)
+              | last // empty
+              | .tag
+            ' "$releases_json"
+          }
+
+          index_items=""
+          staged_count=0
+
           stage_channel() {
-            local channel=$1 tag=$2
+            local channel=$1 explicit=$2
+            local tag
+            tag=$(resolve_channel_tag "$channel" "$explicit")
             [[ -n $tag ]] || return 0
-            if [[ ! $tag =~ ^(testing|nightly|stable|edge)-[0-9]{8}\.[0-9]+$ ]]; then
+            if [[ ! $tag =~ ^${channel}-[0-9]{8}\.[0-9]+$ ]]; then
               echo "Invalid release tag for $channel: $tag" >&2
               exit 1
             fi
@@ -92,6 +125,8 @@ jobs:
             tar -C "site/$channel" --no-same-owner -xf "$work/debian-aurora-repository.tar"
             gpgv --keyring "$keyring" "site/$channel/dists/aurora/InRelease"
             gpgv --keyring "$keyring" "site/$channel/dists/aurora/Release.gpg" "site/$channel/dists/aurora/Release"
+            index_items+="  <li><a href=\"${channel}/dists/aurora/InRelease\">${channel}</a> (${tag})</li>"$'\n'
+            staged_count=$((staged_count + 1))
             echo "Verified and staged $channel -> $tag (gpgv OK against $expected_fpr)" >> "$GITHUB_STEP_SUMMARY"
           }
 
@@ -99,6 +134,11 @@ jobs:
           stage_channel nightly "$NIGHTLY_TAG"
           stage_channel stable "$STABLE_TAG"
           stage_channel edge "$EDGE_TAG"
+
+          if (( staged_count == 0 )); then
+            echo "No signed snapshot releases found for any channel" >&2
+            exit 1
+          fi
 
           cat > site/index.html <<HTML
           <!doctype html>
@@ -108,8 +148,7 @@ jobs:
           <h1>Aurora, based on Debian testing — APT Archive</h1>
           <p>Archive signing key (<a href="aurora-debian-archive.asc">aurora-debian-archive.asc</a>): <code>${expected_fpr}</code></p>
           <ul>
-            <li><a href="testing/dists/aurora/InRelease">testing</a> (${TESTING_TAG})</li>
-          </ul>
+          ${index_items}</ul>
           </body>
           </html>
           HTML
