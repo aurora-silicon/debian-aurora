@@ -198,6 +198,8 @@ jobs:
   publish:
     needs: sign
     runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
     permissions:
       contents: write
     steps:
@@ -209,7 +211,8 @@ jobs:
       # the repository's directories); images.yml serves it to the image
       # build. Enable immutable releases on the repository so a published
       # snapshot cannot change.
-      - name: Publish the immutable package snapshot
+      - id: publish
+        name: Publish the immutable package snapshot
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -219,3 +222,14 @@ jobs:
           gh release create "$tag" debian-aurora-repository.tar --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --prerelease --title "Debian Aurora $tag" \
             --notes 'Signed Aurora packages for Debian testing (suite aurora, component main) for Debian testing on Apple Silicon Macs: an apt repository in one archive. Development snapshot; not hardware-qualified.'
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: publish
+    uses: ./.github/workflows/deploy-pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      testing-tag: ${{ needs.publish.outputs.tag }}
