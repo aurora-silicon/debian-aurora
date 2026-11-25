@@ -1,0 +1,174 @@
+name: Deploy Debian Aurora apt repository to GitHub Pages
+on:
+  workflow_dispatch:
+    inputs:
+      testing-tag:
+        description: Optional signed snapshot release tag to serve at /testing/ (blank auto-resolves latest)
+        default: ''
+      nightly-tag:
+        description: Optional signed snapshot release tag to serve at /nightly/ (blank auto-resolves latest)
+        default: ''
+      stable-tag:
+        description: Optional signed snapshot release tag to serve at /stable/ (blank auto-resolves latest)
+        default: ''
+      edge-tag:
+        description: Optional signed snapshot release tag to serve at /edge/ (blank auto-resolves latest)
+        default: ''
+      dry-run:
+        description: Verify signatures and assemble site/ without deploying to GitHub Pages
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      testing-tag:
+        type: string
+        default: ''
+      nightly-tag:
+        type: string
+        default: ''
+      stable-tag:
+        type: string
+        default: ''
+      edge-tag:
+        type: string
+        default: ''
+      dry-run:
+        type: boolean
+        default: false
+permissions: {}
+concurrency:
+  group: debian-aurora-pages
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Verify signed snapshots and assemble apt repository site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTING_TAG: ${{ inputs.testing-tag }}
+          NIGHTLY_TAG: ${{ inputs.nightly-tag }}
+          STABLE_TAG: ${{ inputs.stable-tag }}
+          EDGE_TAG: ${{ inputs.edge-tag }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnupg gpgv >/dev/null
+
+          # Verify the checked-in public key matches keys/fingerprint.txt before trusting it.
+          expected_fpr=$(awk 'NF {print $1; exit}' keys/fingerprint.txt)
+          actual_fpr=$(gpg --show-keys --with-colons packages/aurora-archive-keyring/keys/aurora-debian-archive.asc |
+            awk -F: '$1=="fpr" {print $10; exit}')
+          if [[ -z $expected_fpr || $actual_fpr != "$expected_fpr" ]]; then
+            echo "Archive public key fingerprint ($actual_fpr) does not match keys/fingerprint.txt ($expected_fpr)" >&2
+            exit 1
+          fi
+          keyring="$RUNNER_TEMP/aurora-archive-keyring.gpg"
+          gpg --dearmor --output "$keyring" packages/aurora-archive-keyring/keys/aurora-debian-archive.asc
+
+          mkdir -p site
+          touch site/.nojekyll
+          cp packages/aurora-archive-keyring/keys/aurora-debian-archive.asc site/aurora-debian-archive.asc
+
+          releases_json="$RUNNER_TEMP/releases.json"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
+            | jq 'add // []' > "$releases_json"
+
+          resolve_channel_tag() {
+            local channel=$1 explicit=$2
+            if [[ -n $explicit ]]; then
+              printf '%s\n' "$explicit"
+              return 0
+            fi
+            jq -r --arg ch "$channel" '
+              [ .[]
+                | select((.draft | not)
+                    and (.tag_name | test("^" + $ch + "-[0-9]{8}\\.[0-9]+$"))
+                    and any(.assets[]?; .name == "debian-aurora-repository.tar"))
+                | .tag_name
+              ]
+              | map({
+                  tag: .,
+                  date: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .d | tonumber),
+                  seq: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .n | tonumber)
+                })
+              | sort_by(.date, .seq)
+              | last // empty
+              | .tag
+            ' "$releases_json"
+          }
+
+          index_items=""
+          staged_count=0
+
+          stage_channel() {
+            local channel=$1 explicit=$2
+            local tag
+            tag=$(resolve_channel_tag "$channel" "$explicit")
+            [[ -n $tag ]] || return 0
+            if [[ ! $tag =~ ^${channel}-[0-9]{8}\.[0-9]+$ ]]; then
+              echo "Invalid release tag for $channel: $tag" >&2
+              exit 1
+            fi
+            local work="$RUNNER_TEMP/snap-$channel"
+            mkdir -p "$work" "site/$channel"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$work" \
+              --pattern debian-aurora-repository.tar
+            tar -C "site/$channel" --no-same-owner -xf "$work/debian-aurora-repository.tar"
+            gpgv --keyring "$keyring" "site/$channel/dists/aurora/InRelease"
+            gpgv --keyring "$keyring" "site/$channel/dists/aurora/Release.gpg" "site/$channel/dists/aurora/Release"
+            index_items+="  <li><a href=\"${channel}/dists/aurora/InRelease\">${channel}</a> (${tag})</li>"$'\n'
+            staged_count=$((staged_count + 1))
+            echo "Verified and staged $channel -> $tag (gpgv OK against $expected_fpr)" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          stage_channel testing "$TESTING_TAG"
+          stage_channel nightly "$NIGHTLY_TAG"
+          stage_channel stable "$STABLE_TAG"
+          stage_channel edge "$EDGE_TAG"
+
+          if (( staged_count == 0 )); then
+            echo "No signed snapshot releases found for any channel" >&2
+            exit 1
+          fi
+
+          cat > site/index.html <<HTML
+          <!doctype html>
+          <html lang="en">
+          <head><meta charset="utf-8"><title>Aurora Debian Archive</title></head>
+          <body>
+          <h1>Aurora, based on Debian testing — APT Archive</h1>
+          <p>Archive signing key (<a href="aurora-debian-archive.asc">aurora-debian-archive.asc</a>): <code>${expected_fpr}</code></p>
+          <ul>
+          ${index_items}</ul>
+          </body>
+          </html>
+          HTML
+          du -sh site site/*
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        if: ${{ !inputs.dry-run }}
+        with:
+          path: site
+
+  deploy:
+    needs: assemble
+    if: ${{ !inputs.dry-run }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - id: deploy
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

@@ -82,7 +82,8 @@ sudo AURORA_ARCHIVE_KEY=$PWD/packages/aurora-archive-keyring/keys/development.as
 | Workflow | Does |
 | --- | --- |
 | `checks.yml` | `scripts/test` and `bash -n` on the scripts, on every push and pull request |
-| `packages.yml` | On main: builds every recipe natively on arm64 in dependency order (`package-level.yml` builds one level), signs the repository in the `testing-signing` environment (`DEBIAN_SIGNING_KEY`, `DEBIAN_SIGNING_PASSPHRASE`) and publishes it as an immutable release `testing-YYYYMMDD.N` |
+| `packages.yml` | On main: builds every recipe natively on arm64 in dependency order (`package-level.yml` builds one level), signs the repository in the `testing-signing` environment (`DEBIAN_SIGNING_KEY`, `DEBIAN_SIGNING_PASSPHRASE`), publishes it as an immutable release `testing-YYYYMMDD.N`, and deploys it to GitHub Pages via `deploy-pages.yml` |
+| `deploy-pages.yml` | Manual or called by `packages.yml`: verifies signed snapshot release tarballs with `gpgv` against `keys/fingerprint.txt` and deploys the apt repository to `https://aurorasilicon.org/debian-aurora/<channel>` |
 | `images.yml` | Manual: builds one profile from a package release for a channel, attests `out/<profile>-filesystems.tar.zst` and uploads the `<profile>-candidate` artifact |
 | `publish-payload.yml` | Manual: aurora-distributions' `build-payload.yml` for a successful image run, signed with `INSTALLER_CATALOG_SIGNING_KEY` from the `catalog-signing` environment |
 
