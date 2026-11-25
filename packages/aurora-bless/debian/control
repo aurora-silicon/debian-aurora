@@ -33,6 +33,7 @@ Description: read and write Apple silicon NVRAM variables (Aurora)
 Package: aurora-btsync
 Architecture: arm64
 Depends: bluez, dbus, systemd, ${misc:Depends}, ${shlibs:Depends}
+Recommends: aurora-wifisync
 Provides: asahi-btsync (= ${binary:Version})
 Conflicts: asahi-btsync
 Replaces: asahi-btsync
@@ -41,6 +42,16 @@ Description: use the Bluetooth pairings made in macOS on Linux (Aurora)
  into BlueZ's storage, so devices paired in macOS work on Linux. A udev rule
  runs it when the NVRAM device appears, before bluetoothd starts. It replaces
  Debian's asahi-btsync and is also installed under that name.
+
+Package: aurora-wifisync
+Architecture: arm64
+Depends: dbus, systemd, ${misc:Depends}, ${shlibs:Depends}
+Recommends: network-manager
+Description: join the Wi-Fi networks saved in macOS on Linux (Aurora)
+ aurora-wifisync adds the Wi-Fi networks macOS keeps in NVRAM to
+ NetworkManager as keyfiles. A udev rule runs it when the NVRAM device
+ appears, before NetworkManager starts. Profiles made on Linux are left
+ alone and no key is printed.
 
 Package: aurora-panel-nits
 Architecture: arm64

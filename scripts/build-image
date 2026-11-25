@@ -116,7 +116,7 @@ packages=(aurora-archive-keyring linux-image-aurora aurora-userpages aurora-boot
   btrfs-progs python3 network-manager wpasupplicant bluez wireless-regdb firmware-linux aurora-sep fprintd libpam-fprintd
   avd-fw libva-v4l2-request upower mesa-vulkan-drivers libgl1-mesa-dri libegl-mesa0 mesa-aurora-fex-guest
   aurora-system-fixes aurora-logos aurora-audio alsa-utils alsa-ucm-conf-aurora aurora-bless
-  aurora-nvram aurora-btsync aurora-panel-nits aurora-camera-denoise aurora-kbd-light aurora-wifi-firmware lzfse
+  aurora-nvram aurora-btsync aurora-wifisync aurora-panel-nits aurora-camera-denoise aurora-kbd-light aurora-wifi-firmware lzfse
   aurora-fido aurora-sep-sk tiny-dfr pipewire-pulse pipewire-alsa openssh-server openssh-client)
 # alarm-aurora's linux-firmware includes the Realtek, MediaTek and Atheros
 # firmware that USB network adapters (r8152, mt76, ath9k_htc) load; Debian's
