@@ -11,7 +11,15 @@ MESA_COMMIT := $(shell sed -n 's/^commit=//p' debian/aurora-pin)
 MESA_ARCHIVE := $(firstword $(wildcard $(CURDIR)/../$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM).orig.tar.*))
 BRANCHES = 25.08 26.08
 STATE = $(CURDIR)/debian/flatpak
+# When built via scripts/build-package, the OSTree repository is built outside
+# sbuild's chroot (where bubblewrap can create user namespaces) and supplied as
+# the 3.0 (quilt) orig-repo component tarball at $(CURDIR)/repo.
+PREBUILT_REPO := $(wildcard $(CURDIR)/repo/aurora-mesa-commit.25.08)
+ifneq ($(PREBUILT_REPO),)
+REPO = $(CURDIR)/repo
+else
 REPO = $(CURDIR)/debian/repo
+endif
 # flatpak-builder's work directories, on a path without a ~ (build-repository.sh).
 WORK = /tmp/aurora-flatpak-gl
 PKG = debian/aurora-flatpak-gl
@@ -29,12 +37,16 @@ export XDG_RUNTIME_DIR = $(STATE)/runtime
 override_dh_auto_configure:
 
 override_dh_auto_build:
+ifeq ($(PREBUILT_REPO),)
 	test -n '$(MESA_ARCHIVE)'
 	mkdir -p $(HOME) $(XDG_DATA_HOME) $(XDG_CACHE_HOME) $(XDG_CONFIG_HOME)
 	install -d -m700 $(XDG_RUNTIME_DIR)
 	AURORA_MESA_COMMIT=$(MESA_COMMIT) AURORA_MESA_ARCHIVE=$(MESA_ARCHIVE) \
 	AURORA_BUILD_JOBS=$(DEB_BUILD_OPTION_PARALLEL) \
 		dbus-run-session -- sh -e debian/gl/build-repository.sh $(REPO) $(WORK) $(BRANCHES)
+else
+	@:
+endif
 
 override_dh_auto_test:
 
@@ -48,7 +60,7 @@ override_dh_auto_install:
 	cp -a $(REPO) $(PKG)/usr/share/aurora-flatpak-gl/repo
 
 override_dh_auto_clean:
-	rm -rf $(STATE) $(REPO) $(WORK)
+	rm -rf $(STATE) $(CURDIR)/debian/repo $(WORK)
 
 # The repository holds OSTree objects for the Flatpak sandbox, not files of
 # this system.

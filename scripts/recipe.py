@@ -234,7 +234,7 @@ def debian_source(recipe, base, work, cache):
     return tree
 
 
-def prepare(name, work, root=ROOT, cache=None):
+def prepare(name, work, root=ROOT, cache=None, components=()):
     recipe = load(name, root)
     cache = cache or root / 'cache'
     sources = json.loads((root / 'sources.json').read_text())
@@ -274,6 +274,13 @@ def prepare(name, work, root=ROOT, cache=None):
                 component = download(extra['source_url'], extra['sha256'], cache / 'sources')
                 target = work / f'{recipe["source"]}_{upstream}.orig-{key}{compression(component)}'
                 shutil.copy2(component, target)
+                unpack(target, tree / key)
+            for key, component in components:
+                if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*', key):
+                    raise RecipeError(f'{name}: component {key} is not a valid component name')
+                comp_path = Path(component).resolve()
+                target = work / f'{recipe["source"]}_{upstream}.orig-{key}{compression(comp_path)}'
+                shutil.copy2(comp_path, target)
                 unpack(target, tree / key)
         if (tree / 'debian').exists():
             shutil.rmtree(tree / 'debian')
@@ -320,12 +327,29 @@ def prepare(name, work, root=ROOT, cache=None):
     return dsc
 
 
+def fetch_upstream(name, root=ROOT, cache=None):
+    """Download and verify a recipe's pinned upstream archive; return (commit, path, suffix)."""
+    recipe = load(name, root)
+    if recipe['kind'] != 'upstream' or 'pin' not in recipe.get('upstream', {}):
+        raise RecipeError(f'{name}: fetch requires a pinned upstream recipe')
+    cache = cache or root / 'cache'
+    sources = json.loads((root / 'sources.json').read_text())
+    url, digest = pinned(recipe['upstream'], sources)
+    archive = download(url, digest, cache / 'sources').resolve()
+    commit = sources[recipe['upstream']['pin']]['commit']
+    return commit, archive, compression(archive)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
     command = commands.add_parser('prepare', help='write the source package and print its .dsc path')
     command.add_argument('name')
     command.add_argument('work', type=Path)
+    command.add_argument('--component', action='append', default=[], metavar='NAME=ARCHIVE',
+                         help='attach an additional 3.0 (quilt) component tarball (orig-NAME)')
+    command = commands.add_parser('fetch', help='download the pinned upstream archive and print COMMIT PATH')
+    command.add_argument('name')
     command = commands.add_parser('field', help='print one recipe field (for build-package)')
     command.add_argument('name')
     command.add_argument('field')
@@ -333,7 +357,15 @@ def main():
     args = parser.parse_args()
     try:
         if args.command == 'prepare':
-            print(prepare(args.name, args.work.resolve()))
+            components = []
+            for item in args.component:
+                if '=' not in item:
+                    raise RecipeError(f'--component expects NAME=ARCHIVE, got {item!r}')
+                components.append(tuple(item.split('=', 1)))
+            print(prepare(args.name, args.work.resolve(), components=components))
+        elif args.command == 'fetch':
+            commit, archive, suffix = fetch_upstream(args.name)
+            print(f'{commit} {archive} {suffix}')
         elif args.command == 'field':
             value = load(args.name).get(args.field)
             print(json.dumps(value) if isinstance(value, (dict, list, bool)) or value is None else value)

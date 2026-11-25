@@ -38,7 +38,7 @@ Build-Depends:
  libxcb-xfixes0-dev,
  libxext-dev,
  libxfixes-dev,
- libxml2-utils:native <!nocheck>,
+ libxml2-utils <!nocheck>,
  libxrandr-dev,
  libxshmfence-dev (>= 1.1),
  libxxf86vm-dev,
