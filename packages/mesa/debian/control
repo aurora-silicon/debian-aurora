@@ -7,6 +7,7 @@ Build-Depends:
  debhelper-compat (= 13),
  bindgen (>= 0.71~) <!cross>,
  bison,
+ chrpath <!cross>,
  flex,
  glslang-tools,
  libclang-21-dev:native,
