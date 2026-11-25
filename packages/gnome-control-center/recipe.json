@@ -1,0 +1,9 @@
+{
+  "source": "gnome-control-center",
+  "version": "1:51.1-2+aurora1",
+  "kind": "rebuild",
+  "debian": {"source": "gnome-control-center", "version": "1:51.1-2"},
+  "changes": "Mouse & Touchpad: a Scroll Speed slider on the Touchpad page for the touchpad scroll-speed key (applied by mutter), on a log scale from a quarter to four times the default, shown only when the schema has the key. The same patch as alarm-aurora's gnome-control-center-aurora and fedora-aurora's gnome-control-center.",
+  "alarm": ["gnome-control-center-aurora"],
+  "notes": "The patch is named 0002- like in fedora-aurora and alarm-aurora, where the Night Light ambient white point switch fork carries 0001-."
+}
