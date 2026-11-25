@@ -1,9 +1,9 @@
 {
   "source": "aurora-steam-native",
-  "version": "1:0+git202610301134.c06f610e360-1",
+  "version": "1:0+git202611241857.9054e3a1984-1",
   "kind": "upstream",
   "upstream": {"pin": "aurora-steam-native"},
-  "changes": "aurora-steam-native at c06f610e360: Valve's native ARM64 Steam client, installed per user from Valve's CDN on the first start and run in a 4 KiB page process tree, and Aurora Play.\nsteam: Aurora's `steam` launcher, which registers the processes Steam tracks for a game with GameMode.",
+  "changes": "aurora-steam-native at 9054e3a1984: Valve's native ARM64 Steam client, installed per user from Valve's CDN on the first start and run in a 4 KiB page process tree, and Aurora Play.\nsteam: Aurora's `steam` launcher, which registers the processes Steam tracks for a game with GameMode.",
   "alarm": ["aurora-steam-native", "steam"],
   "notes": "Epoch 1, as alarm-aurora's: steam-devices declares relations on steam (<< 1.0.0.51-1~), which an unversioned 0+git would match."
 }

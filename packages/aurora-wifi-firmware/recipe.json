@@ -1,6 +1,6 @@
 {
   "source": "aurora-wifi-firmware",
-  "version": "0.2-1",
+  "version": "0.3-1",
   "kind": "upstream",
   "upstream": {"pin": "aurora-wifi-firmware"},
   "changes": "Keep the Wi-Fi and Bluetooth firmware on the installed macOS's, as macOS does: read from the macOS system volume, applied at the next boot. The service is enabled on every Mac, as alarm-aurora's preset enables it.",
