@@ -51,7 +51,7 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
           mkdir -p out/packages
-          find out/packages -maxdepth 1 \( -type f -o -type l \) -printf '%f\n' | sort > "$RUNNER_TEMP/inputs"
+          find out/packages -maxdepth 1 -type f ! -name '*.build' -printf '%f\n' | sort > "$RUNNER_TEMP/inputs"
           docker run --rm --privileged -v "$PWD:/src" -w /src -e PACKAGE -e CROSS -e BUILDER_UID="$(id -u)" \
             debian:testing bash -euo pipefail -c '
               apt-get update -qq
@@ -62,9 +62,10 @@ jobs:
               usermod --add-subuids 100000-165535 --add-subgids 100000-165535 builder
               runuser -u builder -- env AURORA_BUILD_JOBS="$(nproc)" scripts/build-package $CROSS "$PACKAGE"
             ' 2>&1 | tee build.log
-          # Only this recipe's own results go into its artifact.
+          # Only this recipe's own results go into its artifact. Exclude sbuild's
+          # timestamped *.build logs whose ISO-8601 colons actions/upload-artifact rejects.
           mkdir -p out/built
-          find out/packages -maxdepth 1 \( -type f -o -type l \) -printf '%f\n' | sort |
+          find out/packages -maxdepth 1 -type f ! -name '*.build' -printf '%f\n' | sort |
             comm -13 "$RUNNER_TEMP/inputs" - | while read -r file; do mv "out/packages/$file" out/built/; done
           ls -l out/built
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -79,6 +80,6 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
-          name: failed-${{ matrix.package }}-attempt-${{ github.run_attempt }}
+          name: failed-${{ matrix.package.name }}-attempt-${{ github.run_attempt }}
           path: build.log
           retention-days: 14
