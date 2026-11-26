@@ -10,8 +10,9 @@ Rules-Requires-Root: no
 Package: aurora-archive-keyring
 Architecture: all
 Multi-Arch: foreign
-Depends: ${misc:Depends}
-Description: archive key and package pin of Aurora's Debian testing packages
- The public key that signs Aurora's Debian testing package repository, and an apt
+Depends: gpgv, python3, ${misc:Depends}
+Description: archive key, apt guard and package pin of Aurora's Debian testing packages
+ The public key that signs Aurora's Debian testing package repository, an apt
  preference (priority 990) that keeps Aurora's builds of Debian packages
- installed in place of Debian's own.
+ installed in place of Debian's own, and an apt hook that enforces channel
+ binding, freshness and a monotonic snapshot generation floor.

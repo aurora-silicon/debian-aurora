@@ -23,6 +23,8 @@ with Debian's file names:
   units      no unit file or drop-in is executable (systemd warns every boot)
   greeter    KDE signs in with Plasma Login, whose greeter runs on KWin
              Wayland at the display's scale (SDDM's Xorg greeter drew at 1x)
+  apt        Aurora's APT source binds its channel suite (aurora-<channel>),
+             enforces Valid-Until, and ships aurora-apt-guard
   boot       GRUB finds /boot by filesystem UUID on the startup disk only:
              no partition number in the core, no lookup without a hint
 """
@@ -532,6 +534,42 @@ def check_logos(root):
     return None
 
 
+def check_apt(root):
+    sources_text = root.text('/etc/apt/sources.list.d/aurora.sources')
+    if not sources_text:
+        return '/etc/apt/sources.list.d/aurora.sources is missing'
+    fields = {}
+    for line in sources_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if ':' in line:
+            key, _, value = line.partition(':')
+            fields[key.strip()] = value.strip()
+    uri = fields.get('URIs', '')
+    match = re.fullmatch(r'https://aurorasilicon\.org/debian-aurora/(testing|nightly|stable|edge)/?', uri)
+    if not match:
+        return f'aurora.sources has unexpected URIs: {uri or "(unset)"}'
+    channel = match.group(1)
+    expected_suite = f'aurora-{channel}'
+    if fields.get('Suites') != expected_suite:
+        return f'aurora.sources has Suites={fields.get("Suites") or "(unset)"} (expected {expected_suite})'
+    if fields.get('Check-Valid-Until', '').lower() != 'yes':
+        return 'aurora.sources does not set Check-Valid-Until: yes'
+    valid_max = fields.get('Valid-Until-Max', '')
+    if not valid_max.isdigit() or not (1 <= int(valid_max) <= 30 * 86400):
+        return f'aurora.sources has invalid Valid-Until-Max: {valid_max or "(unset)"}'
+    if fields.get('Signed-By') != '/usr/share/keyrings/aurora-archive-keyring.gpg':
+        return f'aurora.sources has unexpected Signed-By: {fields.get("Signed-By") or "(unset)"}'
+    conf_text = root.text('/etc/apt/apt.conf.d/90aurora-repo-guard')
+    if not conf_text or '/usr/libexec/aurora-apt-guard update' not in conf_text:
+        return '/etc/apt/apt.conf.d/90aurora-repo-guard is missing or incomplete'
+    guard = root.path('/usr/libexec/aurora-apt-guard')
+    if not guard.is_file() or not (guard.stat().st_mode & 0o111):
+        return '/usr/libexec/aurora-apt-guard is missing or not executable'
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--profile', required=True, choices=['kde', 'gnome', 'minimal'])
@@ -560,6 +598,7 @@ def main():
         checks.append(('ssh', check_ssh(root)))
         checks.append(('units', check_unit_modes(root)))
         checks.append(('greeter', check_greeter(root, args.profile)))
+        checks.append(('apt', check_apt(root)))
     if args.esp:
         checks.append(('boot', check_boot(args)))
     failures = [(name, problem) for name, problem in checks if problem]

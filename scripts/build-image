@@ -21,7 +21,7 @@ export AURORA_DEVICE_TREE_COMPATIBLE=/nonexistent
 profile=${1:?debian-kde, debian-gnome or debian-minimal required}
 repository=${2:?signed Aurora package repository required}
 channel=${3:-testing}
-[[ $profile =~ ^debian-(kde|gnome|minimal)$ && $channel =~ ^(testing|stable|edge)$ ]]
+[[ $profile =~ ^debian-(kde|gnome|minimal)$ && $channel =~ ^(testing|nightly|stable|edge)$ ]]
 [[ $(id -u) == 0 && $(uname -m) == aarch64 ]]
 desktop=${profile#debian-}
 # The key that signs the repository: the production key, or the local
@@ -43,11 +43,12 @@ size=6G
 [[ $profile == debian-minimal ]] || size=16G
 truncate -s "$size" "$image"
 printf 'label: gpt\nsector-size: 4096\n\nstart=2048,size=131072,type=U\nsize=262144,type=BC13C2FF-59E6-4262-A352-B275FD6F7172\ntype=B921B045-1DF0-41C3-AF44-4C6F280D3FAE\n' | sfdisk --sector-size 4096 "$image"
-loop='' server='' mountroot=$(mktemp -d)
+loop='' server='' mountroot=$(mktemp -d) build_tmp=$(mktemp -d)
 cleanup() {
   local status=$? clean=1
   trap - EXIT
   [[ -z $server ]] || kill "$server" 2>/dev/null || true
+  rm -rf "$build_tmp" 2>/dev/null || true
   for path in dev proc sys run boot/efi boot ''; do
     if mountpoint -q "$mountroot${path:+/$path}"; then umount -R "$mountroot${path:+/$path}" || clean=0; fi
   done
@@ -59,17 +60,43 @@ cleanup() {
 }
 trap cleanup EXIT
 
+build_keyring="$build_tmp/aurora-build.gpg"
+gpg --batch --dearmor < "$key" > "$build_keyring"
+seed_inrelease="$build_tmp/seed.InRelease"
+
 # A local repository is served on loopback, so apt reaches it at the same URL
 # outside the image (bootstrap) and inside it (package installation).
 if [[ -d $repository ]]; then
+  shopt -s nullglob
+  suite_dirs=("$repository"/dists/aurora-*)
+  shopt -u nullglob
+  if (( ${#suite_dirs[@]} != 1 )); then
+    echo "Expected exactly one aurora-<channel> suite in $repository/dists" >&2
+    exit 1
+  fi
+  build_suite=${suite_dirs[0]##*/}
+  build_channel=${build_suite#aurora-}
+  if [[ $channel == stable && $build_channel != stable ]]; then
+    echo "Refusing to build a stable image from a $build_channel snapshot" >&2
+    exit 1
+  fi
+  python3 "$root/scripts/verify-repository.py" --repo "$repository" --channel "$build_channel" \
+    --keyring "$build_keyring"
+  cp "$repository/dists/$build_suite/InRelease" "$seed_inrelease"
   port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
   python3 -m http.server --bind 127.0.0.1 --directory "$repository" "$port" >/dev/null 2>&1 &
   server=$!
   repository=http://127.0.0.1:$port
-  for _ in $(seq 50); do curl -fsS "$repository/dists/aurora/InRelease" >/dev/null 2>&1 && break; sleep 0.1; done
+  for _ in $(seq 50); do curl -fsS "$repository/dists/$build_suite/InRelease" >/dev/null 2>&1 && break; sleep 0.1; done
+else
+  build_channel=$channel
+  build_suite="aurora-$channel"
+  [[ $repository =~ ^https?:// ]]
+  curl -fsS "$repository/dists/$build_suite/InRelease" -o "$seed_inrelease"
+  gpgv --keyring "$build_keyring" "$seed_inrelease" >/dev/null
 fi
 [[ $repository =~ ^https?:// ]]
-curl -fsS "$repository/dists/aurora/InRelease" >/dev/null
+curl -fsS "$repository/dists/$build_suite/InRelease" >/dev/null
 
 loop=$(losetup --find --show --partscan --sector-size 4096 "$image")
 udevadm settle
@@ -104,9 +131,9 @@ cp -L /etc/resolv.conf "$mountroot/etc/resolv.conf"
 # Aurora's repository, checked with its pinned key, ahead of Debian's through
 # the pin aurora-archive-keyring installs (written here too, for the build).
 install -d -m 0755 "$mountroot/etc/apt/keyrings" "$mountroot/etc/apt/preferences.d"
-gpg --batch --dearmor < "$key" > "$mountroot/etc/apt/keyrings/aurora-build.gpg"
-printf 'Types: deb\nURIs: %s\nSuites: aurora\nComponents: main\nSigned-By: /etc/apt/keyrings/aurora-build.gpg\n' \
-  "$repository" > "$mountroot/etc/apt/sources.list.d/aurora-build.sources"
+cp "$build_keyring" "$mountroot/etc/apt/keyrings/aurora-build.gpg"
+printf 'Types: deb\nURIs: %s\nSuites: %s\nComponents: main\nCheck-Valid-Until: yes\nSigned-By: /etc/apt/keyrings/aurora-build.gpg\n' \
+  "$repository" "$build_suite" > "$mountroot/etc/apt/sources.list.d/aurora-build.sources"
 cp "$root/packages/aurora-archive-keyring/aurora.pref" "$mountroot/etc/apt/preferences.d/aurora.pref"
 # Debian's default GRUB settings, which the image extends below; only the
 # full grub-efi-arm64 package would install them, and it reinstalls GRUB on
@@ -162,7 +189,7 @@ done
 # one Aurora's repository carries.
 mesa_version=$(chroot "$mountroot" dpkg-query -W -f '${Version}' libgl1-mesa-dri)
 chroot "$mountroot" apt-cache madison libgl1-mesa-dri |
-  awk -F ' [|] ' -v version="$mesa_version" '$2 == version && $3 ~ / aurora\/main / { found = 1 } END { exit !found }'
+  awk -F ' [|] ' -v version="$mesa_version" -v suite="$build_suite" '$2 == version && index($3, " " suite "/main ") > 0 { found = 1 } END { exit !found }'
 for package in mesa-vulkan-drivers libegl-mesa0; do
   [[ $(chroot "$mountroot" dpkg-query -W -f '${Version}' "$package") == "$mesa_version" ]]
 done
@@ -295,13 +322,24 @@ monitor_free=false
 if [[ -e $mountroot/usr/share/aura/monitor-free ]]; then monitor_free=true; fi
 
 # Built from the pinned snapshot; the installed system follows live Debian
-# testing and the Aurora channel it was built for.
+# testing and the Aurora channel it was built for, with a seeded monotonic
+# generation floor when the build snapshot matches the target channel.
+if [[ $build_channel == "$channel" ]]; then
+  cp "$seed_inrelease" "$mountroot/tmp/aurora-seed.InRelease"
+  chroot "$mountroot" /usr/libexec/aurora-apt-guard seed \
+    --release /tmp/aurora-seed.InRelease \
+    --keyring /etc/apt/keyrings/aurora-build.gpg \
+    --channel "$channel"
+  rm -f "$mountroot/tmp/aurora-seed.InRelease"
+fi
 rm -f "$mountroot/etc/apt/sources.list.d/aurora-build.sources" "$mountroot/etc/apt/keyrings/aurora-build.gpg"
 rm -f "$mountroot/etc/apt/sources.list"
 printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates\nComponents: %s\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: https://security.debian.org/debian-security\nSuites: %s-security\nComponents: %s\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n' \
   "$live_mirror" "$suite" "$suite" "$components" "$suite" "$components" > "$mountroot/etc/apt/sources.list.d/debian.sources"
-printf 'Types: deb\nURIs: https://aurorasilicon.org/debian-aurora/%s\nSuites: aurora\nComponents: main\nSigned-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n' \
-  "$channel" > "$mountroot/etc/apt/sources.list.d/aurora.sources"
+valid_until_max=604800
+[[ $channel != stable ]] || valid_until_max=1209600
+printf 'Types: deb\nURIs: https://aurorasilicon.org/debian-aurora/%s\nSuites: aurora-%s\nComponents: main\nCheck-Valid-Until: yes\nValid-Until-Max: %s\nSigned-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n' \
+  "$channel" "$channel" "$valid_until_max" > "$mountroot/etc/apt/sources.list.d/aurora.sources"
 chroot "$mountroot" apt-get clean
 rm -rf "$mountroot"/var/lib/apt/lists/*
 # The first boot must find nothing left to change. A unit the image keeps off

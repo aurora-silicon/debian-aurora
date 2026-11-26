@@ -2,7 +2,8 @@ name: Debian Aurora packages
 on:
   push:
     branches: [main]
-    paths: [packages/**, scripts/build-package, scripts/recipe.py, scripts/sign-repository.py, images/base.json,
+    paths: [packages/**, scripts/build-package, scripts/recipe.py, scripts/sign-repository.py,
+            scripts/verify-repository.py, scripts/stage-pages.py, images/base.json,
             sources.json, keys/**, .github/workflows/packages.yml, .github/workflows/package-level.yml]
   workflow_dispatch:
 permissions:
@@ -176,17 +177,26 @@ jobs:
           EOF
       - name: Sign and verify the repository
         env:
+          GH_TOKEN: ${{ github.token }}
           DEBIAN_SIGNING_KEY: ${{ secrets.DEBIAN_SIGNING_KEY }}
           DEBIAN_SIGNING_PASSPHRASE: ${{ secrets.DEBIAN_SIGNING_PASSPHRASE }}
         run: |
           set -euo pipefail
+          # Advance past the currently live testing generation if present.
+          min_gen=0
+          if curl -fsS https://aurorasilicon.org/debian-aurora/testing/dists/aurora-testing/InRelease \
+              -o "$RUNNER_TEMP/live.InRelease" 2>/dev/null; then
+            min_gen=$(awk '/^Version:[[:space:]]*[0-9]+$/ {print $2; exit}' "$RUNNER_TEMP/live.InRelease" || echo 0)
+            min_gen=${min_gen:-0}
+          fi
           # --production refuses any key but the one in keys/fingerprint.txt
           # and a keyring package that carries the development key.
-          docker run --rm --network none -e DEBIAN_SIGNING_KEY -e DEBIAN_SIGNING_PASSPHRASE \
+          docker run --rm --network none -e DEBIAN_SIGNING_KEY -e DEBIAN_SIGNING_PASSPHRASE -e MIN_GEN="$min_gen" \
             -v "$PWD:/src" -w /src debian-aurora-signer bash -euo pipefail -c '
               export GNUPGHOME=$(mktemp -d)
               printf "%s\n" "$DEBIAN_SIGNING_KEY" | gpg --batch --quiet --import
-              python3 scripts/sign-repository.py --production --channel testing --packages candidate --output repository
+              python3 scripts/sign-repository.py --production --channel testing \
+                --min-generation "$MIN_GEN" --packages candidate --output repository
             '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -221,7 +231,7 @@ jobs:
           tar -C repository -cf debian-aurora-repository.tar .
           gh release create "$tag" debian-aurora-repository.tar --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --prerelease --title "Debian Aurora $tag" \
-            --notes 'Signed Aurora packages for Debian testing (suite aurora, component main) for Debian testing on Apple Silicon Macs: an apt repository in one archive. Development snapshot; not hardware-qualified.'
+            --notes 'Signed Aurora packages for Debian testing (suite aurora-testing, component main) for Debian testing on Apple Silicon Macs: an apt repository in one archive. Development snapshot; not hardware-qualified.'
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   deploy:

@@ -22,7 +22,9 @@ Nothing here is hardware-qualified yet. debian-minimal, debian-kde and debian-gn
 | `sources.json` | Pinned upstream revisions, identical to alarm-aurora's |
 | `scripts/recipe.py` | Turns a recipe into a Debian source package; `check` validates every recipe |
 | `scripts/build-package` | Builds recipes with sbuild in a clean build root from the snapshot |
-| `scripts/sign-repository.py` | Assembles, signs and verifies the apt repository (suite `aurora`) |
+| `scripts/sign-repository.py` | Assembles, signs and verifies the apt repository (channel-bound suites `aurora-<channel>`, `Valid-Until`, monotonic `Version`) |
+| `scripts/verify-repository.py` | Cryptographically verifies a signed apt snapshot's signatures, channel suite/codename, freshness, monotonic floor and SHA-256 index digests |
+| `scripts/stage-pages.py` | Stages verified snapshots for GitHub Pages deployment, enforcing channel binding, freshness and rollback protection |
 | `scripts/build-image` | Builds and seals an image for the installer ([docs/images.md](docs/images.md)) |
 | `scripts/check-basics.py` | The checks every image must pass before it is sealed |
 | `scripts/test` | Every unit test, and `recipe.py check` |
@@ -83,7 +85,8 @@ sudo AURORA_ARCHIVE_KEY=$PWD/packages/aurora-archive-keyring/keys/development.as
 | --- | --- |
 | `checks.yml` | `scripts/test` and `bash -n` on the scripts, on every push and pull request |
 | `packages.yml` | On main: builds every recipe natively on arm64 in dependency order (`package-level.yml` builds one level), signs the repository in the `testing-signing` environment (`DEBIAN_SIGNING_KEY`, `DEBIAN_SIGNING_PASSPHRASE`), publishes it as an immutable release `testing-YYYYMMDD.N`, and deploys it to GitHub Pages via `deploy-pages.yml` |
-| `deploy-pages.yml` | Manual or called by `packages.yml`: verifies signed snapshot release tarballs with `gpgv` against `keys/fingerprint.txt` and deploys the apt repository to `https://aurorasilicon.org/debian-aurora/<channel>` |
+| `deploy-pages.yml` | Manual or called by `packages.yml`: verifies signed snapshot release tarballs with `scripts/stage-pages.py` against `keys/fingerprint.txt` (enforcing channel-bound suites, `Valid-Until`, and monotonic progression; gating Stable promotions and disaster recovery behind separate environments) and deploys the apt repository to `https://aurorasilicon.org/debian-aurora/<channel>` |
+| `refresh-repository.yml` | Scheduled every two days (or manual): verifies the latest signed Testing snapshot, re-signs it with a fresh `Valid-Until` and higher monotonic generation in `testing-signing`, publishes an immutable release, and deploys it via `deploy-pages.yml` |
 | `images.yml` | Manual: builds one profile from a package release for a channel, attests `out/<profile>-filesystems.tar.zst` and uploads the `<profile>-candidate` artifact |
 | `publish-payload.yml` | Manual: aurora-distributions' `build-payload.yml` for a successful image run, signed with `INSTALLER_CATALOG_SIGNING_KEY` from the `catalog-signing` environment |
 

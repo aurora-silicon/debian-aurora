@@ -1,0 +1,7 @@
+Acquire::Check-Valid-Until "true";
+Acquire::AllowReleaseInfoChange::Origin "false";
+Acquire::AllowReleaseInfoChange::Label "false";
+Acquire::AllowReleaseInfoChange::Suite "false";
+Acquire::AllowReleaseInfoChange::Codename "false";
+APT::Update::Post-Invoke-Success { "/usr/libexec/aurora-apt-guard update"; };
+DPkg::Pre-Invoke { "/usr/libexec/aurora-apt-guard check"; };

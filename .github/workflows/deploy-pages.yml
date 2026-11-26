@@ -9,10 +9,17 @@ on:
         description: Optional signed snapshot release tag to serve at /nightly/ (blank auto-resolves latest)
         default: ''
       stable-tag:
-        description: Optional signed snapshot release tag to serve at /stable/ (blank auto-resolves latest)
+        description: Optional signed snapshot release tag to serve at /stable/ (blank auto-resolves latest; changes require stable-promotion approval)
         default: ''
       edge-tag:
         description: Optional signed snapshot release tag to serve at /edge/ (blank auto-resolves latest)
+        default: ''
+      allow-recovery:
+        description: Disaster recovery override allowing an older or expired signed snapshot (requires pages-recovery approval; channel binding still enforced)
+        type: boolean
+        default: false
+      recovery-reason:
+        description: Required explanation when allow-recovery is true
         default: ''
       dry-run:
         description: Verify signatures and assemble site/ without deploying to GitHub Pages
@@ -47,17 +54,22 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    outputs:
+      stable_changed: ${{ steps.stage.outputs.stable_changed }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - name: Verify signed snapshots and assemble apt repository site
+      - id: stage
+        name: Verify signed snapshots and assemble apt repository site
         env:
           GH_TOKEN: ${{ github.token }}
           TESTING_TAG: ${{ inputs.testing-tag }}
           NIGHTLY_TAG: ${{ inputs.nightly-tag }}
           STABLE_TAG: ${{ inputs.stable-tag }}
           EDGE_TAG: ${{ inputs.edge-tag }}
+          ALLOW_RECOVERY: ${{ inputs.allow-recovery || false }}
+          RECOVERY_REASON: ${{ inputs.recovery-reason || '' }}
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -74,20 +86,12 @@ jobs:
           keyring="$RUNNER_TEMP/aurora-archive-keyring.gpg"
           gpg --dearmor --output "$keyring" packages/aurora-archive-keyring/keys/aurora-debian-archive.asc
 
-          mkdir -p site
-          touch site/.nojekyll
-          cp packages/aurora-archive-keyring/keys/aurora-debian-archive.asc site/aurora-debian-archive.asc
-
           releases_json="$RUNNER_TEMP/releases.json"
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
             | jq 'add // []' > "$releases_json"
 
-          resolve_channel_tag() {
-            local channel=$1 explicit=$2
-            if [[ -n $explicit ]]; then
-              printf '%s\n' "$explicit"
-              return 0
-            fi
+          latest_channel_tag() {
+            local channel=$1
             jq -r --arg ch "$channel" '
               [ .[]
                 | select((.draft | not)
@@ -106,61 +110,81 @@ jobs:
             ' "$releases_json"
           }
 
-          index_items=""
-          staged_count=0
+          channels_json="$RUNNER_TEMP/channels.json"
+          printf '{}\n' > "$channels_json"
 
-          stage_channel() {
+          download_channel() {
             local channel=$1 explicit=$2
-            local tag
-            tag=$(resolve_channel_tag "$channel" "$explicit")
+            local latest tag
+            latest=$(latest_channel_tag "$channel")
+            tag=${explicit:-$latest}
             [[ -n $tag ]] || return 0
             if [[ ! $tag =~ ^${channel}-[0-9]{8}\.[0-9]+$ ]]; then
               echo "Invalid release tag for $channel: $tag" >&2
               exit 1
             fi
             local work="$RUNNER_TEMP/snap-$channel"
-            mkdir -p "$work" "site/$channel"
+            mkdir -p "$work"
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$work" \
               --pattern debian-aurora-repository.tar
-            tar -C "site/$channel" --no-same-owner -xf "$work/debian-aurora-repository.tar"
-            gpgv --keyring "$keyring" "site/$channel/dists/aurora/InRelease"
-            gpgv --keyring "$keyring" "site/$channel/dists/aurora/Release.gpg" "site/$channel/dists/aurora/Release"
-            index_items+="  <li><a href=\"${channel}/dists/aurora/InRelease\">${channel}</a> (${tag})</li>"$'\n'
-            staged_count=$((staged_count + 1))
-            echo "Verified and staged $channel -> $tag (gpgv OK against $expected_fpr)" >> "$GITHUB_STEP_SUMMARY"
+            jq --arg ch "$channel" --arg tag "$tag" --arg latest "${latest:-$tag}" \
+               --arg tar "$work/debian-aurora-repository.tar" \
+               '.[$ch] = {tag: $tag, latest_tag: $latest, tarball: $tar}' \
+               "$channels_json" > "$channels_json.tmp"
+            mv "$channels_json.tmp" "$channels_json"
           }
 
-          stage_channel testing "$TESTING_TAG"
-          stage_channel nightly "$NIGHTLY_TAG"
-          stage_channel stable "$STABLE_TAG"
-          stage_channel edge "$EDGE_TAG"
+          download_channel testing "$TESTING_TAG"
+          download_channel nightly "$NIGHTLY_TAG"
+          download_channel stable "$STABLE_TAG"
+          download_channel edge "$EDGE_TAG"
 
-          if (( staged_count == 0 )); then
-            echo "No signed snapshot releases found for any channel" >&2
-            exit 1
+          extra_args=()
+          if [[ $ALLOW_RECOVERY == true ]]; then
+            extra_args+=(--allow-recovery --recovery-reason "$RECOVERY_REASON")
           fi
 
-          cat > site/index.html <<HTML
-          <!doctype html>
-          <html lang="en">
-          <head><meta charset="utf-8"><title>Aurora Debian Archive</title></head>
-          <body>
-          <h1>Aurora, based on Debian testing — APT Archive</h1>
-          <p>Archive signing key (<a href="aurora-debian-archive.asc">aurora-debian-archive.asc</a>): <code>${expected_fpr}</code></p>
-          <ul>
-          ${index_items}</ul>
-          </body>
-          </html>
-          HTML
+          python3 scripts/stage-pages.py \
+            --keyring "$keyring" \
+            --fingerprint "$expected_fpr" \
+            --site site \
+            --asc packages/aurora-archive-keyring/keys/aurora-debian-archive.asc \
+            --channels-json "$channels_json" \
+            --live-base-url https://aurorasilicon.org/debian-aurora \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            "${extra_args[@]}"
           du -sh site site/*
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         if: ${{ !inputs.dry-run }}
         with:
           path: site
 
-  deploy:
+  # Stable channel promotions require approval on the stable-promotion
+  # environment (configured with required reviewers by repository owners).
+  approve-stable:
     needs: assemble
-    if: ${{ !inputs.dry-run }}
+    if: ${{ !inputs.dry-run && needs.assemble.outputs.stable_changed == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: stable-promotion
+    steps:
+      - name: Record Stable channel promotion approval
+        run: echo "Stable channel deployment approved"
+
+  # Disaster recovery deploys (older or expired snapshots) require approval on
+  # the pages-recovery environment.
+  approve-recovery:
+    needs: assemble
+    if: ${{ !inputs.dry-run && inputs.allow-recovery }}
+    runs-on: ubuntu-24.04
+    environment: pages-recovery
+    steps:
+      - name: Record disaster recovery approval
+        run: echo "Disaster recovery deployment approved"
+
+  deploy:
+    needs: [assemble, approve-stable, approve-recovery]
+    if: ${{ !inputs.dry-run && !cancelled() && !failure() && needs.assemble.result == 'success' }}
     runs-on: ubuntu-24.04
     environment:
       name: github-pages

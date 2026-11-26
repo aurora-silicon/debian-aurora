@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+"""Enforce channel binding, freshness and a monotonic floor for Aurora APT feeds.
+
+Invoked automatically by APT via /etc/apt/apt.conf.d/90aurora-repo-guard:
+  aurora-apt-guard update   (APT::Update::Post-Invoke-Success)
+  aurora-apt-guard check    (DPkg::Pre-Invoke)
+
+Also provides image-build seeding and explicit root disaster recovery:
+  aurora-apt-guard seed --release PATH --keyring PATH --channel CHANNEL
+  aurora-apt-guard reset-floor --channel CHANNEL --generation N --date-epoch E --reason TEXT
+  aurora-apt-guard status
+"""
+import argparse
+from email.utils import parsedate_to_datetime
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+ORIGIN = 'Aurora Silicon'
+CHANNELS = ('testing', 'nightly', 'stable', 'edge')
+MAX_VALID_DAYS = 30
+MAX_FUTURE_DATE_SKEW_SECONDS = 300
+DEFAULT_STATE_FILE = Path('/var/lib/aurora-apt/floor.json')
+DEFAULT_SOURCES_DIR = Path('/etc/apt/sources.list.d')
+DEFAULT_LISTS_DIR = Path('/var/lib/apt/lists')
+AURORA_KEYRING = '/usr/share/keyrings/aurora-archive-keyring.gpg'
+SCHEMA_VERSION = 1
+
+
+def suite_for_channel(channel):
+    if channel not in CHANNELS:
+        raise ValueError(f'unknown channel: {channel}')
+    return f'aurora-{channel}'
+
+
+def channel_from_suite(suite):
+    for ch in CHANNELS:
+        if suite == f'aurora-{ch}':
+            return ch
+    return None
+
+
+def parse_rfc2822_utc(value, field_name):
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'invalid {field_name} timestamp: {value!r}') from exc
+    if dt is None or dt.tzinfo is None:
+        raise ValueError(f'{field_name} timestamp has no timezone: {value!r}')
+    return int(dt.timestamp())
+
+
+def apt_uri_to_filename(uri):
+    """Match APT's URItoFileName encoding (apt-pkg/contrib/strutl.cc)."""
+    if '://' in uri:
+        scheme, _, rest = uri.partition('://')
+        # For file:///path, rest starts with '/path'.
+        s = rest
+    else:
+        s = uri
+    # APT quotes unsafe characters (including '_') before replacing '/' with '_'.
+    quoted = []
+    for ch in s:
+        code = ord(ch)
+        if ch in '"\'\\|{}[]<>^~`;?:@&=+$,_ %' or code <= 0x20 or code >= 0x7F:
+            quoted.append(f'%{code:02x}')
+        else:
+            quoted.append(ch)
+    return ''.join(quoted).replace('/', '_')
+
+
+def list_prefix_for(uri, suite):
+    base = uri.rstrip('/')
+    return apt_uri_to_filename(f'{base}/dists/{suite}')
+
+
+def parse_deb822_stanzas(text):
+    stanzas = []
+    current = {}
+    current_key = None
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            if current:
+                stanzas.append(current)
+                current = {}
+                current_key = None
+            continue
+        if stripped.startswith('#'):
+            continue
+        if raw_line[0] in (' ', '\t'):
+            if current_key is not None:
+                current[current_key] = current[current_key] + '\n' + stripped
+            continue
+        if ':' not in raw_line:
+            continue
+        key, _, value = raw_line.partition(':')
+        key = key.strip()
+        current[key] = value.strip()
+        current_key = key
+    if current:
+        stanzas.append(current)
+    return stanzas
+
+
+def is_aurora_stanza(stanza):
+    uris = stanza.get('URIs', '').split()
+    suites = stanza.get('Suites', '').split()
+    signed_by = stanza.get('Signed-By', '').strip()
+    if any('aurorasilicon.org' in u or '/debian-aurora/' in u for u in uris):
+        return True
+    if any(s == 'aurora' or s.startswith('aurora-') for s in suites):
+        return True
+    if AURORA_KEYRING in signed_by:
+        return True
+    return False
+
+
+def discover_aurora_targets(sources_dir):
+    """Return list of (source_path, uri, suite, channel, keyring_path) for enabled Aurora stanzas."""
+    targets = []
+    errors = []
+    if not sources_dir.is_dir():
+        return targets, errors
+    for source_path in sorted(sources_dir.glob('*.sources')):
+        try:
+            stanzas = parse_deb822_stanzas(source_path.read_text(encoding='utf-8'))
+        except OSError as exc:
+            errors.append(f'{source_path}: unable to read: {exc}')
+            continue
+        for stanza in stanzas:
+            if not is_aurora_stanza(stanza):
+                continue
+            enabled = stanza.get('Enabled', 'yes').strip().lower()
+            if enabled in ('no', 'false', '0'):
+                continue
+            trusted = stanza.get('Trusted', 'no').strip().lower()
+            if trusted in ('yes', 'true', '1'):
+                errors.append(f'{source_path}: Aurora source must not set Trusted: yes')
+                continue
+            signed_by = stanza.get('Signed-By', '').strip()
+            if not signed_by or '\n' in signed_by or not Path(signed_by).is_file():
+                errors.append(f'{source_path}: Aurora source requires a Signed-By keyring file')
+                continue
+            uris = stanza.get('URIs', '').split()
+            suites = stanza.get('Suites', '').split()
+            if not uris or not suites:
+                errors.append(f'{source_path}: Aurora source is missing URIs or Suites')
+                continue
+            for uri in uris:
+                m = re.search(r'/debian-aurora/([^/\s]+)(?:/|$)', uri)
+                url_channel = m.group(1) if m else None
+                for suite in suites:
+                    channel = channel_from_suite(suite)
+                    if channel is None:
+                        errors.append(
+                            f'{source_path}: unbound or unknown Aurora suite {suite!r} '
+                            f'(expected aurora-<channel>)')
+                        continue
+                    if url_channel is not None and url_channel != channel:
+                        errors.append(
+                            f'{source_path}: URI channel {url_channel!r} does not match '
+                            f'Suites {suite!r}')
+                        continue
+                    targets.append((source_path, uri, suite, channel, Path(signed_by)))
+    return targets, errors
+
+
+def parse_release_headers(text):
+    headers = {}
+    current_key = None
+    for raw_line in text.splitlines():
+        if not raw_line.strip():
+            current_key = None
+            continue
+        if raw_line[0] in (' ', '\t'):
+            if current_key is not None and current_key not in ('MD5Sum', 'SHA1', 'SHA256', 'SHA512'):
+                headers[current_key] = headers[current_key] + ' ' + raw_line.strip()
+            continue
+        if ':' not in raw_line:
+            raise ValueError(f'malformed Release line: {raw_line!r}')
+        key, _, value = raw_line.partition(':')
+        key = key.strip()
+        value = value.strip()
+        current_key = key
+        if key not in ('MD5Sum', 'SHA1', 'SHA256', 'SHA512'):
+            if key in headers:
+                raise ValueError(f'duplicate Release header: {key}')
+            headers[key] = value
+    return headers
+
+
+def verify_and_parse_release(inrelease_path, keyring_path, channel, now,
+                             check_expiry=True, release_path=None, release_gpg_path=None):
+    with tempfile.TemporaryDirectory() as temporary:
+        if inrelease_path is not None and inrelease_path.is_file():
+            verified = Path(temporary) / 'Release.verified'
+            res = subprocess.run(
+                ['gpgv', '--keyring', str(keyring_path), '--output', str(verified), str(inrelease_path)],
+                capture_output=True, text=True)
+            if res.returncode != 0 or not verified.is_file():
+                raise ValueError(f'GPG verification failed for {inrelease_path}: {res.stderr.strip()}')
+            payload = verified.read_text(encoding='utf-8')
+        elif (release_path is not None and release_path.is_file()
+              and release_gpg_path is not None and release_gpg_path.is_file()):
+            res = subprocess.run(
+                ['gpgv', '--keyring', str(keyring_path), str(release_gpg_path), str(release_path)],
+                capture_output=True, text=True)
+            if res.returncode != 0:
+                raise ValueError(f'GPG verification failed for {release_gpg_path}: {res.stderr.strip()}')
+            payload = release_path.read_text(encoding='utf-8')
+        else:
+            raise ValueError('missing signed Release/InRelease metadata')
+
+    expected_suite = suite_for_channel(channel)
+    headers = parse_release_headers(payload)
+
+    if headers.get('Origin') != ORIGIN:
+        raise ValueError(f'unexpected Origin {headers.get("Origin")!r} (expected {ORIGIN!r})')
+    if headers.get('Suite') != expected_suite:
+        raise ValueError(f'unexpected Suite {headers.get("Suite")!r} (expected {expected_suite!r})')
+    if headers.get('Codename') != expected_suite:
+        raise ValueError(f'unexpected Codename {headers.get("Codename")!r} (expected {expected_suite!r})')
+
+    version_str = headers.get('Version', '')
+    if not version_str.isdigit() or int(version_str) < 1:
+        raise ValueError(f'missing or invalid monotonic Version header: {version_str!r}')
+    generation = int(version_str)
+
+    date_str = headers.get('Date')
+    if not date_str:
+        raise ValueError('missing Date header')
+    date_epoch = parse_rfc2822_utc(date_str, 'Date')
+    if date_epoch > now + MAX_FUTURE_DATE_SKEW_SECONDS:
+        raise ValueError(f'Release Date is in the future: {date_str}')
+
+    valid_until_str = headers.get('Valid-Until')
+    if not valid_until_str:
+        raise ValueError('missing Valid-Until header')
+    valid_until_epoch = parse_rfc2822_utc(valid_until_str, 'Valid-Until')
+    if valid_until_epoch <= date_epoch:
+        raise ValueError(f'Valid-Until ({valid_until_str}) is not after Date ({date_str})')
+    if valid_until_epoch - date_epoch > MAX_VALID_DAYS * 86400:
+        raise ValueError(f'Valid-Until window exceeds {MAX_VALID_DAYS} days')
+    if check_expiry and valid_until_epoch <= now:
+        raise ValueError(f'Release expired at {valid_until_str}')
+
+    return {
+        'suite': expected_suite,
+        'generation': generation,
+        'date': date_str,
+        'date_epoch': date_epoch,
+        'valid_until': valid_until_str,
+        'valid_until_epoch': valid_until_epoch,
+    }
+
+
+def load_floor_state(state_file):
+    if not state_file.exists():
+        return {'schema_version': SCHEMA_VERSION, 'channels': {}}
+    try:
+        data = json.loads(state_file.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f'cannot read floor state {state_file}: {exc}') from exc
+    if not isinstance(data, dict) or data.get('schema_version') != SCHEMA_VERSION:
+        raise ValueError(f'invalid schema in floor state {state_file}')
+    channels = data.get('channels')
+    if not isinstance(channels, dict):
+        raise ValueError(f'invalid channels map in floor state {state_file}')
+    for ch, entry in channels.items():
+        if ch not in CHANNELS or not isinstance(entry, dict):
+            raise ValueError(f'invalid channel entry {ch!r} in floor state {state_file}')
+        gen = entry.get('generation')
+        dep = entry.get('date_epoch')
+        if not isinstance(gen, int) or isinstance(gen, bool) or gen < 0:
+            raise ValueError(f'invalid generation for {ch!r} in floor state {state_file}')
+        if not isinstance(dep, int) or isinstance(dep, bool) or dep < 0:
+            raise ValueError(f'invalid date_epoch for {ch!r} in floor state {state_file}')
+    return data
+
+
+def save_floor_state(state_file, state):
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix='.floor.', suffix='.tmp', dir=str(state_file.parent))
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            json.dump(state, handle, indent=2, sort_keys=True)
+            handle.write('\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp_name, 0o644)
+        os.replace(tmp_name, state_file)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def quarantine_list_files(lists_dir, prefix):
+    if not lists_dir.is_dir():
+        return
+    for entry in lists_dir.iterdir():
+        if entry.is_file() and (entry.name == prefix or entry.name.startswith(prefix + '_')):
+            try:
+                entry.unlink()
+            except OSError:
+                pass
+
+
+def detect_apt_dirs(sources_dir_arg, lists_dir_arg):
+    sources_dir = sources_dir_arg
+    lists_dir = lists_dir_arg
+    if sources_dir is None or lists_dir is None:
+        try:
+            out = subprocess.check_output(
+                ['apt-config', 'shell', 'SOURCES_DIR', 'Dir::Etc::sourceparts/d',
+                 'LISTS_DIR', 'Dir::State::lists/d'],
+                text=True)
+            for line in out.splitlines():
+                if line.startswith('SOURCES_DIR=') and sources_dir is None:
+                    sources_dir = Path(line.split('=', 1)[1].strip("'\""))
+                elif line.startswith('LISTS_DIR=') and lists_dir is None:
+                    lists_dir = Path(line.split('=', 1)[1].strip("'\""))
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return sources_dir or DEFAULT_SOURCES_DIR, lists_dir or DEFAULT_LISTS_DIR
+
+
+def run_guard(mode, sources_dir, lists_dir, state_file, now):
+    try:
+        state = load_floor_state(state_file)
+    except ValueError as exc:
+        print(f'aurora-apt-guard: {exc}', file=sys.stderr)
+        return 1
+
+    targets, errors = discover_aurora_targets(sources_dir)
+    check_expiry = (mode == 'update')
+    state_changed = False
+
+    for source_path, uri, suite, channel, keyring_path in targets:
+        prefix = list_prefix_for(uri, suite)
+        inrelease = lists_dir / f'{prefix}_InRelease'
+        release = lists_dir / f'{prefix}_Release'
+        release_gpg = lists_dir / f'{prefix}_Release.gpg'
+        has_metadata = inrelease.is_file() or (release.is_file() and release_gpg.is_file())
+
+        if not has_metadata:
+            if mode == 'check':
+                # Freshly imaged or offline host before first apt-get update.
+                continue
+            errors.append(
+                f'{source_path}: no signed Release/InRelease found in {lists_dir} '
+                f'for {uri} ({suite})')
+            quarantine_list_files(lists_dir, prefix)
+            continue
+
+        try:
+            meta = verify_and_parse_release(
+                inrelease if inrelease.is_file() else None,
+                keyring_path=keyring_path,
+                channel=channel,
+                now=now,
+                check_expiry=check_expiry,
+                release_path=release if release.is_file() else None,
+                release_gpg_path=release_gpg if release_gpg.is_file() else None,
+            )
+        except ValueError as exc:
+            quarantine_list_files(lists_dir, prefix)
+            errors.append(f'{source_path} ({uri} {suite}): {exc}')
+            continue
+
+        floor = state['channels'].get(channel)
+        if floor is not None:
+            if meta['generation'] < floor['generation']:
+                quarantine_list_files(lists_dir, prefix)
+                errors.append(
+                    f'{source_path} ({channel}): rollback rejected: '
+                    f"signed generation {meta['generation']} < floor {floor['generation']}")
+                continue
+            if meta['date_epoch'] < floor['date_epoch']:
+                quarantine_list_files(lists_dir, prefix)
+                errors.append(
+                    f'{source_path} ({channel}): rollback rejected: '
+                    f"signed Date {meta['date']} ({meta['date_epoch']}) < floor {floor['date_epoch']}")
+                continue
+
+        if mode == 'update':
+            if (floor is None
+                    or meta['generation'] > floor['generation']
+                    or meta['date_epoch'] > floor['date_epoch']):
+                state['channels'][channel] = {
+                    'suite': meta['suite'],
+                    'generation': meta['generation'],
+                    'date': meta['date'],
+                    'date_epoch': meta['date_epoch'],
+                    'valid_until': meta['valid_until'],
+                }
+                state_changed = True
+
+    if errors:
+        for err in errors:
+            print(f'aurora-apt-guard: ERROR: {err}', file=sys.stderr)
+        return 1
+
+    if state_changed:
+        try:
+            save_floor_state(state_file, state)
+        except OSError as exc:
+            print(f'aurora-apt-guard: ERROR: failed to persist floor state {state_file}: {exc}',
+                  file=sys.stderr)
+            return 1
+
+    return 0
+
+
+def cmd_seed(args):
+    now = args.now if args.now is not None else int(time.time())
+    try:
+        meta = verify_and_parse_release(
+            args.release,
+            keyring_path=args.keyring,
+            channel=args.channel,
+            now=now,
+            check_expiry=not args.allow_expired,
+        )
+        state = load_floor_state(args.state_file)
+    except ValueError as exc:
+        print(f'aurora-apt-guard: ERROR: {exc}', file=sys.stderr)
+        return 1
+
+    existing = state['channels'].get(args.channel)
+    if existing is not None:
+        if meta['generation'] < existing['generation'] or meta['date_epoch'] < existing['date_epoch']:
+            print(
+                f'aurora-apt-guard: ERROR: seed would lower existing {args.channel} floor '
+                f"({meta['generation']} < {existing['generation']})",
+                file=sys.stderr)
+            return 1
+
+    state['channels'][args.channel] = {
+        'suite': meta['suite'],
+        'generation': meta['generation'],
+        'date': meta['date'],
+        'date_epoch': meta['date_epoch'],
+        'valid_until': meta['valid_until'],
+    }
+    save_floor_state(args.state_file, state)
+    print(
+        f"aurora-apt-guard: seeded {args.channel} floor at generation {meta['generation']} "
+        f"(date {meta['date']})")
+    return 0
+
+
+def cmd_reset_floor(args):
+    if not args.reason.strip():
+        print('aurora-apt-guard: ERROR: --reason must be non-empty', file=sys.stderr)
+        return 1
+    if args.generation < 0 or args.date_epoch < 0:
+        print('aurora-apt-guard: ERROR: --generation and --date-epoch must be non-negative',
+              file=sys.stderr)
+        return 1
+    try:
+        state = load_floor_state(args.state_file)
+    except ValueError:
+        state = {'schema_version': SCHEMA_VERSION, 'channels': {}}
+
+    state['channels'][args.channel] = {
+        'suite': suite_for_channel(args.channel),
+        'generation': args.generation,
+        'date_epoch': args.date_epoch,
+        'recovery_reason': args.reason.strip(),
+        'recovery_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+    }
+    save_floor_state(args.state_file, state)
+    print(
+        f'aurora-apt-guard: reset {args.channel} floor to generation={args.generation} '
+        f'date_epoch={args.date_epoch} (reason: {args.reason.strip()})')
+    return 0
+
+
+def cmd_status(args):
+    try:
+        state = load_floor_state(args.state_file)
+    except ValueError as exc:
+        print(f'aurora-apt-guard: ERROR: {exc}', file=sys.stderr)
+        return 1
+    print(json.dumps(state, indent=2, sort_keys=True))
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--state-file', type=Path, default=DEFAULT_STATE_FILE)
+    parser.add_argument('--sources-dir', type=Path, default=None)
+    parser.add_argument('--lists-dir', type=Path, default=None)
+    parser.add_argument('--now', type=int, default=None)
+    sub = parser.add_subparsers(dest='command', required=True)
+
+    sub.add_parser('update')
+    sub.add_parser('check')
+    sub.add_parser('status')
+
+    seed_p = sub.add_parser('seed')
+    seed_p.add_argument('--release', type=Path, required=True)
+    seed_p.add_argument('--keyring', type=Path, required=True)
+    seed_p.add_argument('--channel', choices=CHANNELS, required=True)
+    seed_p.add_argument('--allow-expired', action='store_true')
+
+    reset_p = sub.add_parser('reset-floor')
+    reset_p.add_argument('--channel', choices=CHANNELS, required=True)
+    reset_p.add_argument('--generation', type=int, required=True)
+    reset_p.add_argument('--date-epoch', type=int, required=True)
+    reset_p.add_argument('--reason', type=str, required=True)
+
+    args = parser.parse_args()
+    if args.command in ('update', 'check'):
+        sources_dir, lists_dir = detect_apt_dirs(args.sources_dir, args.lists_dir)
+        now = args.now if args.now is not None else int(time.time())
+        sys.exit(run_guard(args.command, sources_dir, lists_dir, args.state_file, now))
+    elif args.command == 'seed':
+        sys.exit(cmd_seed(args))
+    elif args.command == 'reset-floor':
+        sys.exit(cmd_reset_floor(args))
+    elif args.command == 'status':
+        sys.exit(cmd_status(args))
+
+
+if __name__ == '__main__':
+    main()

@@ -131,6 +131,17 @@ class CheckBasicsTests(unittest.TestCase):
         write(u / 'lib/locale/locale-archive', b'\0en_US.utf8\0')
         link(e / 'systemd/system/multi-user.target.wants/NetworkManager.service',
              '/usr/lib/systemd/system/NetworkManager.service')
+        write(e / 'apt/sources.list.d/aurora.sources',
+              'Types: deb\n'
+              'URIs: https://aurorasilicon.org/debian-aurora/testing\n'
+              'Suites: aurora-testing\n'
+              'Components: main\n'
+              'Check-Valid-Until: yes\n'
+              'Valid-Until-Max: 604800\n'
+              'Signed-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n')
+        write(e / 'apt/apt.conf.d/90aurora-repo-guard',
+              'APT::Update::Post-Invoke-Success { "/usr/libexec/aurora-apt-guard update"; };\n')
+        write(u / 'libexec/aurora-apt-guard', '#!/usr/bin/env python3\n', mode=0o755)
         touchid_files(root, profile)
         if profile != 'minimal':
             logos(u)
@@ -522,6 +533,68 @@ class CheckBasicsTests(unittest.TestCase):
     def test_plasma_power_button_must_suspend(self):
         self.assert_fails('kde', lambda root: (root / 'etc/xdg/powerdevilrc').unlink(),
                           'Plasma AC power button action is the logout screen, not suspend')
+
+    # APT channel binding and freshness guard
+
+    def test_apt_unbound_aurora_suite_fails(self):
+        self.assert_fails(
+            'minimal',
+            lambda root: write(
+                root / 'etc/apt/sources.list.d/aurora.sources',
+                'Types: deb\n'
+                'URIs: https://aurorasilicon.org/debian-aurora/testing\n'
+                'Suites: aurora\n'
+                'Components: main\n'
+                'Check-Valid-Until: yes\n'
+                'Valid-Until-Max: 604800\n'
+                'Signed-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n'),
+            'expected aurora-testing')
+
+    def test_apt_mismatched_channel_suite_fails(self):
+        self.assert_fails(
+            'minimal',
+            lambda root: write(
+                root / 'etc/apt/sources.list.d/aurora.sources',
+                'Types: deb\n'
+                'URIs: https://aurorasilicon.org/debian-aurora/stable\n'
+                'Suites: aurora-testing\n'
+                'Components: main\n'
+                'Check-Valid-Until: yes\n'
+                'Valid-Until-Max: 1209600\n'
+                'Signed-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n'),
+            'expected aurora-stable')
+
+    def test_apt_missing_valid_until_check_fails(self):
+        self.assert_fails(
+            'minimal',
+            lambda root: write(
+                root / 'etc/apt/sources.list.d/aurora.sources',
+                'Types: deb\n'
+                'URIs: https://aurorasilicon.org/debian-aurora/testing\n'
+                'Suites: aurora-testing\n'
+                'Components: main\n'
+                'Valid-Until-Max: 604800\n'
+                'Signed-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n'),
+            'Check-Valid-Until: yes')
+
+    def test_apt_missing_guard_fails(self):
+        self.assert_fails(
+            'minimal',
+            lambda root: (root / 'usr/libexec/aurora-apt-guard').unlink(),
+            'aurora-apt-guard is missing or not executable')
+
+    def test_apt_stable_channel_passes(self):
+        self.assert_passes(
+            'minimal',
+            lambda root: write(
+                root / 'etc/apt/sources.list.d/aurora.sources',
+                'Types: deb\n'
+                'URIs: https://aurorasilicon.org/debian-aurora/stable\n'
+                'Suites: aurora-stable\n'
+                'Components: main\n'
+                'Check-Valid-Until: yes\n'
+                'Valid-Until-Max: 1209600\n'
+                'Signed-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n'))
 
 
 class LogindPrecedenceTests(unittest.TestCase):

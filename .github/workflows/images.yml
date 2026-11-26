@@ -38,14 +38,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release-tag }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
-          [[ $RELEASE_TAG =~ ^testing-[0-9]{8}\.[0-9]+$ ]]
+          [[ $RELEASE_TAG =~ ^(testing|nightly|stable|edge)-[0-9]{8}\.[0-9]+$ ]]
+          build_channel=${RELEASE_TAG%%-*}
+          if [[ $CHANNEL == stable && $build_channel != stable ]]; then
+            echo "Refusing to build a stable image from $RELEASE_TAG" >&2
+            exit 1
+          fi
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnupg gpgv >/dev/null
+          expected_fpr=$(awk 'NF {print $1; exit}' keys/fingerprint.txt)
+          actual_fpr=$(gpg --show-keys --with-colons packages/aurora-archive-keyring/keys/aurora-debian-archive.asc |
+            awk -F: '$1=="fpr" {print $10; exit}')
+          if [[ -z $expected_fpr || $actual_fpr != "$expected_fpr" ]]; then
+            echo "Archive public key fingerprint ($actual_fpr) does not match keys/fingerprint.txt ($expected_fpr)" >&2
+            exit 1
+          fi
+          keyring="$RUNNER_TEMP/aurora-archive-keyring.gpg"
+          gpg --dearmor --output "$keyring" packages/aurora-archive-keyring/keys/aurora-debian-archive.asc
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/snapshot" \
             --pattern debian-aurora-repository.tar
           mkdir -p out/repository
           tar -C out/repository --no-same-owner -xf "$RUNNER_TEMP/snapshot/debian-aurora-repository.tar"
-          test -s out/repository/dists/aurora/InRelease
+          python3 scripts/verify-repository.py --repo out/repository --channel "$build_channel" --keyring "$keyring"
       # The finalizer is the aurora-platform pin in sources.json
       # (aurora-firstboot); it seals debian-* profiles only once that pin
       # includes aurora-platform's Debian support.

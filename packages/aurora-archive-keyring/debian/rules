@@ -12,6 +12,8 @@ override_dh_auto_build:
 override_dh_auto_install:
 	install -Dm644 aurora-archive-keyring.gpg $(PKG)/usr/share/keyrings/aurora-archive-keyring.gpg
 	install -Dm644 aurora.pref $(PKG)/etc/apt/preferences.d/aurora.pref
+	install -Dm644 90aurora-repo-guard $(PKG)/etc/apt/apt.conf.d/90aurora-repo-guard
+	install -Dm755 aurora-apt-guard $(PKG)/usr/libexec/aurora-apt-guard
 
 override_dh_clean:
 	dh_clean aurora-archive-keyring.gpg

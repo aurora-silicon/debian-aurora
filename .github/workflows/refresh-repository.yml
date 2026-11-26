@@ -1,0 +1,167 @@
+name: Refresh signed Debian Aurora apt repository
+on:
+  schedule:
+    # Re-sign mutable channels every two days so Valid-Until (7 days) never lapses
+    # during quiet periods without package commits.
+    - cron: '0 4 */2 * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: debian-refresh-testing
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  resign:
+    runs-on: ubuntu-24.04
+    environment: testing-signing
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Fetch and verify latest testing snapshot packages
+        id: fetch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnupg gpgv >/dev/null
+
+          expected_fpr=$(awk 'NF {print $1; exit}' keys/fingerprint.txt)
+          actual_fpr=$(gpg --show-keys --with-colons packages/aurora-archive-keyring/keys/aurora-debian-archive.asc |
+            awk -F: '$1=="fpr" {print $10; exit}')
+          if [[ -z $expected_fpr || $actual_fpr != "$expected_fpr" ]]; then
+            echo "Archive public key fingerprint ($actual_fpr) does not match keys/fingerprint.txt ($expected_fpr)" >&2
+            exit 1
+          fi
+          keyring="$RUNNER_TEMP/aurora-archive-keyring.gpg"
+          gpg --dearmor --output "$keyring" packages/aurora-archive-keyring/keys/aurora-debian-archive.asc
+
+          releases_json="$RUNNER_TEMP/releases.json"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
+            | jq 'add // []' > "$releases_json"
+
+          latest_tag=$(jq -r '
+            [ .[]
+              | select((.draft | not)
+                  and (.tag_name | test("^testing-[0-9]{8}\\.[0-9]+$"))
+                  and any(.assets[]?; .name == "debian-aurora-repository.tar"))
+              | .tag_name
+            ]
+            | map({
+                tag: .,
+                date: (capture("^testing-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .d | tonumber),
+                seq: (capture("^testing-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .n | tonumber)
+              })
+            | sort_by(.date, .seq)
+            | last // empty
+            | .tag
+          ' "$releases_json")
+
+          if [[ -z $latest_tag ]]; then
+            echo "No testing snapshot release found to refresh" >&2
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/prev" candidate
+          gh release download "$latest_tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/prev" \
+            --pattern debian-aurora-repository.tar
+          mkdir -p "$RUNNER_TEMP/prev-repo"
+          tar -C "$RUNNER_TEMP/prev-repo" --no-same-owner -xf "$RUNNER_TEMP/prev/debian-aurora-repository.tar"
+
+          # Verify signature, channel binding and index digests (allowing expired so a
+          # delayed schedule can still refresh verified packages).
+          meta_json=$(python3 scripts/verify-repository.py \
+            --repo "$RUNNER_TEMP/prev-repo" \
+            --channel testing \
+            --keyring "$keyring" \
+            --allow-expired \
+            --json)
+          prev_gen=$(jq -r '.generation' <<<"$meta_json")
+          cp "$RUNNER_TEMP/prev-repo"/pool/main/*.deb candidate/
+
+          today=$(date -u +%Y%m%d)
+          next_seq=$(jq -r --arg today "$today" '
+            [ .[]
+              | .tag_name
+              | select(test("^testing-" + $today + "\\.[0-9]+$"))
+              | capture("^testing-[0-9]{8}\\.(?<n>[0-9]+)$") | .n | tonumber
+            ] | (max // 0) + 1
+          ' "$releases_json")
+
+          echo "prev_gen=$prev_gen" >> "$GITHUB_OUTPUT"
+          echo "next_tag=testing-${today}.${next_seq}" >> "$GITHUB_OUTPUT"
+      - name: Prepare the isolated signer before loading credentials
+        run: |
+          docker build -t debian-aurora-signer - <<'EOF'
+          FROM debian:testing
+          RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                apt-utils gnupg gpgv python3 xz-utils && rm -rf /var/lib/apt/lists/*
+          EOF
+      - name: Re-sign repository with a fresh Valid-Until and monotonic generation
+        env:
+          DEBIAN_SIGNING_KEY: ${{ secrets.DEBIAN_SIGNING_KEY }}
+          DEBIAN_SIGNING_PASSPHRASE: ${{ secrets.DEBIAN_SIGNING_PASSPHRASE }}
+          PREV_GEN: ${{ steps.fetch.outputs.prev_gen }}
+        run: |
+          set -euo pipefail
+          docker run --rm --network none -e DEBIAN_SIGNING_KEY -e DEBIAN_SIGNING_PASSPHRASE -e PREV_GEN \
+            -v "$PWD:/src" -w /src debian-aurora-signer bash -euo pipefail -c '
+              export GNUPGHOME=$(mktemp -d)
+              printf "%s\n" "$DEBIAN_SIGNING_KEY" | gpg --batch --quiet --import
+              python3 scripts/sign-repository.py --production --channel testing \
+                --min-generation "$PREV_GEN" --packages candidate --output repository
+            '
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: refreshed-debian-repository
+          path: repository/
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    needs: resign
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: refreshed-debian-repository
+          path: repository
+      - id: publish
+        name: Publish the refreshed immutable package snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          today=$(date -u +%Y%m%d)
+          next_seq=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
+            | jq -r --arg today "$today" '
+              add // []
+              | [ .[].tag_name
+                  | select(test("^testing-" + $today + "\\.[0-9]+$"))
+                  | capture("^testing-[0-9]{8}\\.(?<n>[0-9]+)$") | .n | tonumber
+                ] | (max // 0) + 1
+            ')
+          tag="testing-${today}.${next_seq}"
+          tar -C repository -cf debian-aurora-repository.tar .
+          gh release create "$tag" debian-aurora-repository.tar --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "Debian Aurora $tag" \
+            --notes 'Refreshed signed Aurora packages for Debian testing (suite aurora-testing, component main). Development snapshot; not hardware-qualified.'
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: publish
+    uses: ./.github/workflows/deploy-pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      testing-tag: ${{ needs.publish.outputs.tag }}
