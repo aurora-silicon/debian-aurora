@@ -212,10 +212,10 @@
   },
   "fex-emu": {
     "repository": "https://github.com/aurora-silicon/fex",
-    "commit": "05d2618882d41bca4492ccb0385919121bee20cd",
-    "source_url": "https://codeload.github.com/aurora-silicon/fex/tar.gz/05d2618882d41bca4492ccb0385919121bee20cd",
-    "archive_root": "fex-05d2618882d41bca4492ccb0385919121bee20cd",
-    "sha256": "b93abcd9f2fa3e2fc1e2ce8a1dc8e84e9ebd510ddd01ea739ad23f890f91a3a1",
+    "commit": "8d7427572be621302805be63a2d0ae45f84aacc9",
+    "source_url": "https://codeload.github.com/aurora-silicon/fex/tar.gz/8d7427572be621302805be63a2d0ae45f84aacc9",
+    "archive_root": "fex-8d7427572be621302805be63a2d0ae45f84aacc9",
+    "sha256": "34f11c65ac699b6d5c9edbfd08db84b398f4c211a3c4f0b514da99117988780e",
     "version": "2610",
     "extra_sources": {
       "cpp-optparse": {

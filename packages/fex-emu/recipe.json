@@ -1,9 +1,9 @@
 {
   "source": "fex-emu",
-  "version": "2610+git202611250455.05d2618882d-2",
+  "version": "2610+git202611262019.8d7427572be-1",
   "kind": "upstream",
   "upstream": {"git": "fex-emu", "submodules": true},
-  "changes": "FEX from Aurora's fork (aurora-silicon/fex 05d2618882d) with alarm-aurora's three patches, its RootFS and graphics-provider integration and the \"FEX (Aurora)\" Steam compatibility tool (fex-emu-steam).\nFEXConfig is split into fex-emu-config, so fex-emu does not pull in Qt.\nThe provider's bind at /run/fex-emu/rootfs is read-only, nosuid and nodev.",
+  "changes": "FEX from Aurora's fork (aurora-silicon/fex 8d7427572be) with alarm-aurora's three patches, its RootFS and graphics-provider integration and the \"FEX (Aurora)\" Steam compatibility tool (fex-emu-steam).\nFEXConfig is split into fex-emu-config, so fex-emu does not pull in Qt.\nThe provider's bind at /run/fex-emu/rootfs is read-only, nosuid and nodev.\nStarted with credentials its caller did not have (AT_SECURE), FEX reads only the system's configuration, including /run/fex-emu/Config.json, and the system's directories.",
   "alarm": ["fex-emu", "fex-emu-steam"],
   "notes": "No Debian package provides the x86-64 RootFS image (alarm-aurora depends on fex-emu-rootfs-arch); see docs/parity/graphics.md. Cross builds skip fex-emu-config (Qt 6)."
 }
