@@ -22,7 +22,8 @@ Nothing here is hardware-qualified yet. debian-minimal, debian-kde and debian-gn
 | `sources.json` | Pinned upstream revisions, identical to alarm-aurora's |
 | `scripts/recipe.py` | Turns a recipe into a Debian source package; `check` validates every recipe |
 | `scripts/build-package` | Builds recipes with sbuild in a clean build root from the snapshot |
-| `scripts/sign-repository.py` | Assembles, signs and verifies the apt repository (suite `aurora`) |
+| `scripts/sign-repository.py` | Assembles, signs and verifies the apt repository of a channel ([below](#the-apt-repository)); `--refresh` signs a snapshot's Release file again |
+| `scripts/check-repository.py` | The checks a snapshot passes before `deploy-pages.yml` serves it for a channel |
 | `scripts/build-image` | Builds and seals an image for the installer ([docs/images.md](docs/images.md)) |
 | `scripts/check-basics.py` | The checks every image must pass before it is sealed |
 | `scripts/test` | Every unit test, and `recipe.py check` |
@@ -77,13 +78,22 @@ sudo AURORA_ARCHIVE_KEY=$PWD/packages/aurora-archive-keyring/keys/development.as
 - Plasma Login as the KDE display manager;
 - a GRUB that finds /boot by filesystem UUID on the startup disk only.
 
+## The apt repository
+
+Each channel is served at `https://aurorasilicon.org/debian-aurora/<channel>` from a signed snapshot release (`<channel>-YYYYMMDD.N`), with component `main` (arm64 and all) and its own distribution: `aurora` for Testing, which installed systems already follow, and `aurora-<channel>` for the others. The distribution is the Suite and Codename the Release file signs, and an installed system's `aurora.sources` names it, so:
+
+- `deploy-pages.yml` serves a snapshot only for the channel its signed Release file names, and only if its packages were signed no earlier than those the channel serves now (`Aurora-Snapshot-Date`), so it never rolls a channel back. Going back is a new snapshot built from the older sources.
+- apt refuses a Release file whose Codename changes under a system that already follows the channel. A first `apt update` only warns, which is why the deployment checks it.
+
+A Release file is valid for seven days (`Valid-Until`), and `deploy-pages.yml` signs every served channel's Release file again daily with a new `Date` and `Valid-Until` and nothing else changed. If that stops for a week, apt stops taking updates from the channel rather than trusting an old snapshot indefinitely, and apt never replaces a Release file it has with an older one.
+
 ## CI
 
 | Workflow | Does |
 | --- | --- |
 | `checks.yml` | `scripts/test` and `bash -n` on the scripts, on every push and pull request |
 | `packages.yml` | On main: builds every recipe natively on arm64 in dependency order (`package-level.yml` builds one level), signs the repository in the `testing-signing` environment (`DEBIAN_SIGNING_KEY`, `DEBIAN_SIGNING_PASSPHRASE`), publishes it as an immutable release `testing-YYYYMMDD.N`, and deploys it to GitHub Pages via `deploy-pages.yml` |
-| `deploy-pages.yml` | Manual or called by `packages.yml`: verifies signed snapshot release tarballs with `gpgv` against `keys/fingerprint.txt` and deploys the apt repository to `https://aurorasilicon.org/debian-aurora/<channel>` |
+| `deploy-pages.yml` | Daily, manual or called by `packages.yml`: checks each channel's snapshot release with `check-repository.py` against the key in `keys/fingerprint.txt`, signs its Release file again in the `testing-signing` environment, and deploys the apt repository to `https://aurorasilicon.org/debian-aurora/<channel>` |
 | `images.yml` | Manual: builds one profile from a package release for a channel, attests `out/<profile>-filesystems.tar.zst` and uploads the `<profile>-candidate` artifact |
 | `publish-payload.yml` | Manual: aurora-distributions' `build-payload.yml` for a successful image run, signed with `INSTALLER_CATALOG_SIGNING_KEY` from the `catalog-signing` environment |
 

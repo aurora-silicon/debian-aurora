@@ -298,10 +298,20 @@ if [[ -e $mountroot/usr/share/aura/monitor-free ]]; then monitor_free=true; fi
 # testing and the Aurora channel it was built for.
 rm -f "$mountroot/etc/apt/sources.list.d/aurora-build.sources" "$mountroot/etc/apt/keyrings/aurora-build.gpg"
 rm -f "$mountroot/etc/apt/sources.list"
+# mmdebstrap keeps its --aptopt options in 99mmdebstrap; they are for the
+# pinned snapshots above. The installed system refuses an expired Release file.
+rm -f "$mountroot/etc/apt/apt.conf.d/99mmdebstrap"
+if grep -rqsiE 'Check-Valid-Until[[:space:]]*"?(false|no|0|off)\b' "$mountroot/etc/apt/apt.conf" "$mountroot/etc/apt/apt.conf.d"; then
+  echo "The image's apt configuration turns off the Valid-Until check" >&2
+  exit 1
+fi
+# Each channel's Release file names its own distribution (scripts/sign-repository.py).
+distribution=aurora
+[[ $channel == testing ]] || distribution=aurora-$channel
 printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates\nComponents: %s\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: https://security.debian.org/debian-security\nSuites: %s-security\nComponents: %s\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n' \
   "$live_mirror" "$suite" "$suite" "$components" "$suite" "$components" > "$mountroot/etc/apt/sources.list.d/debian.sources"
-printf 'Types: deb\nURIs: https://aurorasilicon.org/debian-aurora/%s\nSuites: aurora\nComponents: main\nSigned-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n' \
-  "$channel" > "$mountroot/etc/apt/sources.list.d/aurora.sources"
+printf 'Types: deb\nURIs: https://aurorasilicon.org/debian-aurora/%s\nSuites: %s\nComponents: main\nSigned-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n' \
+  "$channel" "$distribution" > "$mountroot/etc/apt/sources.list.d/aurora.sources"
 chroot "$mountroot" apt-get clean
 rm -rf "$mountroot"/var/lib/apt/lists/*
 # The first boot must find nothing left to change. A unit the image keeps off

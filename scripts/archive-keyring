@@ -1,0 +1,17 @@
+#!/bin/bash
+# Check that the archive key aurora-archive-keyring carries is the one
+# keys/fingerprint.txt names, dearmor it into DIR and print the keyring's path.
+#
+#   scripts/archive-keyring DIR
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+dir=${1:?directory for the keyring required}
+key=$root/packages/aurora-archive-keyring/keys/aurora-debian-archive.asc
+expected=$(awk 'NF {print $1; exit}' "$root/keys/fingerprint.txt")
+actual=$(gpg --show-keys --with-colons "$key" | awk -F: '$1=="fpr" {print $10; exit}')
+if [[ -z $expected || $actual != "$expected" ]]; then
+  echo "Archive public key fingerprint ($actual) does not match keys/fingerprint.txt ($expected)" >&2
+  exit 1
+fi
+gpg --batch --yes --dearmor --output "$dir/aurora-archive-keyring.gpg" "$key"
+printf '%s\n' "$dir/aurora-archive-keyring.gpg"

@@ -14,14 +14,15 @@ jobs:
   checks:
     runs-on: ubuntu-24.04
     # Debian testing's own tools: check-basics follows its systemd's logind
-    # lookup, and the bootchain tests need dtc.
+    # lookup, the bootchain tests need dtc, and the repository tests run apt,
+    # apt-ftparchive and gpg.
     container: debian:testing
     steps:
       - name: Install the test tools
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-            ca-certificates device-tree-compiler e2fsprogs git python3 systemd >/dev/null
+            apt-utils ca-certificates device-tree-compiler e2fsprogs git gnupg gpgv python3 systemd xz-utils >/dev/null
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false

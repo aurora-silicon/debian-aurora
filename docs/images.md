@@ -24,7 +24,7 @@ The build follows alarm-aurora's `scripts/build-image` step for step:
 ### Base system
 
 - alarm-aurora unpacks the signed Arch Linux ARM root filesystem and initializes a pacman keyring. Here, `mmdebstrap --variant=important` builds the base from the snapshot pinned in `images/base.json`, checked with Debian's archive keyring.
-- The built system follows live Debian testing (`testing`, `testing-updates`, `testing-security` on deb.debian.org) and `https://aurorasilicon.org/debian-aurora/<channel>`, signed with `aurora-archive-keyring`'s key. The build-time source and key are removed.
+- The built system follows live Debian testing (`testing`, `testing-updates`, `testing-security` on deb.debian.org) and `https://aurorasilicon.org/debian-aurora/<channel>` with the channel's distribution (`aurora` for Testing, `aurora-<channel>` otherwise), signed with `aurora-archive-keyring`'s key. The build-time source and key are removed, and so is `/etc/apt/apt.conf.d/99mmdebstrap`: mmdebstrap keeps its `--aptopt` options there, and the build's `Acquire::Check-Valid-Until "false"` is for the pinned snapshots only. The build fails if the image's apt configuration still turns that check off.
 
 ### The apt pin
 
