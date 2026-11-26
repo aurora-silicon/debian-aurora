@@ -48,21 +48,26 @@ defaults:
   run:
     shell: bash
 jobs:
-  # Each channel serves the snapshot its tag names, or its newest release. The
-  # snapshot has to be signed for that channel and must not be older than the
-  # one the channel serves now. Its InRelease goes to the signer.
+  # Each channel serves the snapshot its tag names, or its newest release; one
+  # that fails falls back to the next release that passes and is reported by
+  # the verdict job after the others are deployed. A snapshot has to be signed
+  # for its channel and must not be older than the one the channel serves.
+  # Stable keeps the snapshot it serves unless stable-tag names another
+  # (scripts/stage-channels.py). The staged InRelease files go to the signer.
   stage:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
       tags: ${{ steps.stage.outputs.tags }}
+      failed: ${{ steps.stage.outputs.failed }}
+      stable-promotion: ${{ steps.stage.outputs.stable-promotion }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
       - id: stage
-        name: Verify the snapshot of each channel
+        name: Choose and verify the snapshot of each channel
         env:
           GH_TOKEN: ${{ github.token }}
           TESTING_TAG: ${{ inputs.testing-tag }}
@@ -74,83 +79,57 @@ jobs:
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnupg gpgv >/dev/null
           keyring=$(bash scripts/archive-keyring "$RUNNER_TEMP")
-
-          releases_json="$RUNNER_TEMP/releases.json"
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
-            | jq 'add // []' > "$releases_json"
-
-          resolve_channel_tag() {
-            local channel=$1 explicit=$2
-            if [[ -n $explicit ]]; then
-              printf '%s\n' "$explicit"
-              return 0
-            fi
-            jq -r --arg ch "$channel" '
-              [ .[]
-                | select((.draft | not)
-                    and (.tag_name | test("^" + $ch + "-[0-9]{8}\\.[0-9]+$"))
-                    and any(.assets[]?; .name == "debian-aurora-repository.tar"))
-                | .tag_name
-              ]
-              | map({
-                  tag: .,
-                  date: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .d | tonumber),
-                  seq: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .n | tonumber)
-                })
-              | sort_by(.date, .seq)
-              | last // empty
-              | .tag
-            ' "$releases_json"
-          }
-
-          tags='{}'
-          stage_channel() {
-            local channel=$1 explicit=$2
-            local tag work dist
-            tag=$(resolve_channel_tag "$channel" "$explicit")
-            [[ -n $tag ]] || return 0
-            if [[ ! $tag =~ ^${channel}-[0-9]{8}\.[0-9]+$ ]]; then
-              echo "Invalid release tag for $channel: $tag" >&2
-              exit 1
-            fi
-            work="$RUNNER_TEMP/snap-$channel"
-            mkdir -p "$work/repository"
-            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$work" \
-              --pattern debian-aurora-repository.tar
-            tar -C "$work/repository" --no-same-owner -xf "$work/debian-aurora-repository.tar"
-            python3 scripts/check-repository.py --repository "$work/repository" --channel "$channel" \
-              --keyring "$keyring" --floor > "$work/check.json"
-            dist=$(jq -r .distribution "$work/check.json")
-            mkdir -p "metadata/$channel/dists/$dist"
-            cp "$work/repository/dists/$dist/InRelease" "metadata/$channel/dists/$dist/InRelease"
-            tags=$(jq -c --arg channel "$channel" --arg tag "$tag" '. + {($channel): $tag}' <<<"$tags")
-            echo "Verified $channel -> $tag: $(cat "$work/check.json")" >> "$GITHUB_STEP_SUMMARY"
-            rm -rf "$work"
-          }
-
-          stage_channel testing "$TESTING_TAG"
-          stage_channel nightly "$NIGHTLY_TAG"
-          stage_channel stable "$STABLE_TAG"
-          stage_channel edge "$EDGE_TAG"
-
-          if [[ $tags == '{}' ]]; then
-            echo "No signed snapshot releases found for any channel" >&2
+            | jq 'add // []' > "$RUNNER_TEMP/releases.json"
+          python3 scripts/stage-channels.py --releases "$RUNNER_TEMP/releases.json" --keyring "$keyring" \
+            --output metadata --testing "$TESTING_TAG" --nightly "$NIGHTLY_TAG" --stable "$STABLE_TAG" \
+            --edge "$EDGE_TAG" > "$RUNNER_TEMP/staged.json"
+          {
+            echo '```json'
+            jq . "$RUNNER_TEMP/staged.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ $(jq '.tags | length' "$RUNNER_TEMP/staged.json") == 0 ]]; then
+            echo "No channel has a snapshot that passes" >&2
             exit 1
           fi
-          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags=$(jq -c .tags "$RUNNER_TEMP/staged.json")"
+            echo "failed=$(jq -c .failed "$RUNNER_TEMP/staged.json")"
+            echo "stable-promotion=$(jq -r '."stable-promotion"' "$RUNNER_TEMP/staged.json")"
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-metadata
           path: metadata/
           retention-days: 1
 
+  # A Stable snapshot other than the one Stable serves waits for the
+  # stable-promotion environment, whose reviewers the repository owners set.
+  # Only a run given stable-tag gets here; scheduled and packages.yml runs keep
+  # Stable as it is. While a promotion waits, later runs of this workflow wait
+  # behind it, and a rejection releases them.
+  approve-stable:
+    needs: stage
+    if: ${{ !inputs.dry-run && needs.stage.outputs.stable-promotion == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: stable-promotion
+    permissions: {}
+    steps:
+      - name: Stable promotion approved
+        env:
+          TAGS: ${{ needs.stage.outputs.tags }}
+        run: jq -r '"Stable serves \(.stable) once this run deploys"' <<<"$TAGS"
+
   # The signing key is only in the testing-signing environment, and it signs
   # in a container without network. It signs each channel's Release file
   # again with a new Date and Valid-Until; sign-repository.py --refresh
   # changes nothing else and refuses a Release file of another channel.
   refresh:
-    needs: stage
-    if: ${{ !inputs.dry-run }}
+    needs: [stage, approve-stable]
+    if: >-
+      ${{ !cancelled() && !inputs.dry-run && needs.stage.result == 'success'
+      && (needs.approve-stable.result == 'success' || needs.approve-stable.result == 'skipped') }}
     runs-on: ubuntu-24.04
     environment: testing-signing
     permissions:
@@ -286,3 +265,18 @@ jobs:
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - id: deploy
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  # A channel whose given tag or newer releases failed was served from an
+  # older release, or not at all. That fails the run, after the deployment.
+  verdict:
+    needs: [stage, assemble, deploy]
+    if: ${{ !cancelled() && needs.stage.result == 'success' && needs.stage.outputs.failed != '[]' }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Report the releases that failed
+        env:
+          FAILED: ${{ needs.stage.outputs.failed }}
+        run: |
+          jq -r '.[]' <<<"$FAILED" >&2
+          exit 1

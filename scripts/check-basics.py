@@ -25,8 +25,15 @@ with Debian's file names:
              Wayland at the display's scale (SDDM's Xorg greeter drew at 1x)
   boot       GRUB finds /boot by filesystem UUID on the startup disk only:
              no partition number in the core, no lookup without a hint
+
+and one of Debian's own:
+
+  apt        the image follows an Aurora channel at that channel's
+             distribution, with Aurora's key, and no apt configuration
+             turns off the Valid-Until check
 """
 import argparse
+import importlib.util
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -532,6 +539,47 @@ def check_logos(root):
     return None
 
 
+APT_SOURCE = '/etc/apt/sources.list.d/aurora.sources'
+APT_KEYRING = '/usr/share/keyrings/aurora-archive-keyring.gpg'
+APT_CHANNEL = re.compile(r'https://aurorasilicon\.org/debian-aurora/([a-z]+)')
+VALID_UNTIL_OFF = re.compile(r'Check-Valid-Until\s*"?(false|no|0|off)\b', re.IGNORECASE)
+
+
+def channel_distribution(channel):
+    """The distribution scripts/sign-repository.py signs channel's Release files for, or None."""
+    path = Path(__file__).resolve().parent / 'sign-repository.py'
+    spec = importlib.util.spec_from_file_location('sign_repository', path)
+    signer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(signer)
+    return signer.distribution(channel) if channel in signer.CHANNELS else None
+
+
+def check_apt(root):
+    text = root.text(APT_SOURCE)
+    if text is None:
+        return f'{APT_SOURCE} is missing: the image follows no Aurora channel'
+    fields = {}
+    for line in text.splitlines():
+        name, separator, value = line.partition(':')
+        if separator and line[:1] not in (' ', '\t', '#'):
+            fields[name.strip()] = value.strip()
+    match = APT_CHANNEL.fullmatch(fields.get('URIs', ''))
+    distribution = channel_distribution(match[1]) if match else None
+    if distribution is None:
+        return f'{APT_SOURCE} follows {fields.get("URIs")!r}, not an Aurora channel'
+    if fields.get('Suites') != distribution:
+        return f'{APT_SOURCE} asks the {match[1]} channel for {fields.get("Suites")!r}, not {distribution}'
+    if fields.get('Signed-By') != APT_KEYRING:
+        return f'{APT_SOURCE} is not checked with {APT_KEYRING}'
+    configuration = root.path('/etc/apt/apt.conf.d')
+    files = ['/etc/apt/apt.conf'] + [f'/etc/apt/apt.conf.d/{path.name}' for path in
+                                      (sorted(configuration.iterdir()) if configuration.is_dir() else ())]
+    for name in files:
+        if VALID_UNTIL_OFF.search(root.text(name) or ''):
+            return f'{name} turns off apt\'s Valid-Until check'
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--profile', required=True, choices=['kde', 'gnome', 'minimal'])
@@ -560,6 +608,7 @@ def main():
         checks.append(('ssh', check_ssh(root)))
         checks.append(('units', check_unit_modes(root)))
         checks.append(('greeter', check_greeter(root, args.profile)))
+        checks.append(('apt', check_apt(root)))
     if args.esp:
         checks.append(('boot', check_boot(args)))
     failures = [(name, problem) for name, problem in checks if problem]

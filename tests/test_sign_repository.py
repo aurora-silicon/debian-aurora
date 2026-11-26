@@ -14,8 +14,10 @@ import io
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import unittest
 
@@ -32,6 +34,7 @@ def load(name, path):
 
 signer = load('sign_repository', 'scripts/sign-repository.py')
 checker = load('check_repository', 'scripts/check-repository.py')
+stager = load('stage_channels', 'scripts/stage-channels.py')
 HAVE_GPG = shutil.which('gpg') and shutil.which('gpgv')
 
 
@@ -68,8 +71,9 @@ def tearDownModule():
         shutil.rmtree(KEYS['home'], ignore_errors=True)
 
 
-def make_snapshot(path, channel='testing', when=NOW, key=None, legacy=False, package='aurora-test'):
-    """A snapshot of channel at path signed at when; legacy leaves out the fields sign-repository.py now adds."""
+def make_snapshot(path, channel='testing', when=NOW, key=None, legacy=False, package='aurora-test', edit=None):
+    """A snapshot of channel at path signed at when; legacy leaves out the fields sign-repository.py now adds,
+    and edit changes the Release text before it is signed."""
     dists = path / 'dists' / signer.distribution(channel)
     packages = (f'Package: {package}\nVersion: 1\nArchitecture: arm64\nMaintainer: Aurora Silicon '
                 f'<noreply@aurorasilicon.org>\nFilename: pool/main/{package}_1_arm64.deb\nSize: 1\n'
@@ -81,7 +85,7 @@ def make_snapshot(path, channel='testing', when=NOW, key=None, legacy=False, pac
         text = text.replace('Components: main\n', f'Components: main\nDate: {signer.format_date(when)}\n')
     else:
         text = signer.stamp(text, when, signer.format_date(when))
-    (dists / 'Release').write_text(text)
+    (dists / 'Release').write_text(edit(text) if edit else text)
     signer.sign(dists, key or KEYS['key'])
     return path
 
@@ -96,8 +100,8 @@ class SignedSnapshots(unittest.TestCase):
         self.work = Path(tempfile.mkdtemp(prefix='aurora-repository-'))
         self.addCleanup(shutil.rmtree, self.work, ignore_errors=True)
 
-    def snapshot(self, channel='testing', when=NOW, key=None, name='snapshot', legacy=False):
-        return make_snapshot(self.work / name, channel, when, key, legacy)
+    def snapshot(self, channel='testing', when=NOW, key=None, name='snapshot', legacy=False, edit=None):
+        return make_snapshot(self.work / name, channel, when, key, legacy, edit=edit)
 
     def check(self, repository, channel='testing', **options):
         with contextlib.redirect_stderr(io.StringIO()):
@@ -158,6 +162,57 @@ class SignedSnapshots(unittest.TestCase):
         (repository / 'dists/aurora/main/binary-arm64/Packages').write_text('Package: other\n')
         self.refused('does not match Release', self.check, repository)
         self.refused('gpgv', self.check, self.snapshot(name='foreign', key=self.other))
+
+    def test_check_refuses_another_channels_codename(self):
+        # Every other field names Stable.
+        repository = self.snapshot('stable', edit=lambda text: text.replace('Codename: aurora-stable',
+                                                                            'Codename: aurora'))
+        self.refused("Release Codename is 'aurora', not 'aurora-stable'", self.check, repository, 'stable')
+
+    def test_check_refuses_a_release_other_than_the_one_inrelease_signs(self):
+        repository = self.snapshot()
+        dists = repository / 'dists/aurora'
+        # Release and Release.gpg agree with each other, and the key signed both, but not InRelease's text.
+        release = dists / 'Release'
+        release.write_text(release.read_text().replace('Components: main', 'Components: main contrib'))
+        subprocess.run(['gpg', '--batch', '--yes', '--armor', '--detach-sign', '--local-user', self.key,
+                        '--output', str(dists / 'Release.gpg'), str(release)], check=True, capture_output=True)
+        self.refused('differs from the text InRelease signs', self.check, repository)
+
+    def test_check_refuses_an_index_outside_its_directory(self):
+        outside = b'Package: outside\n'
+        line = f' {hashlib.sha256(outside).hexdigest()} {len(outside):>16} ../../outside\n'
+        repository = self.snapshot(edit=lambda text: text + line)
+        (repository / 'outside').write_bytes(outside)
+        self.refused('outside its directory', self.check, repository)
+
+    def test_hold_needs_the_served_snapshot(self):
+        served = self.snapshot('stable', name='served', when=NOW - datetime.timedelta(days=1))
+        floor = str(served / 'dists/aurora-stable/InRelease')
+        self.check(served, 'stable', floor=floor, hold=True)
+        newer = self.snapshot('stable', name='newer')
+        self.refused('is not the one the channel serves', self.check, newer, 'stable', floor=floor, hold=True)
+        self.refused('serves (none)', self.check, newer, 'stable', floor=str(self.work / 'none'), hold=True)
+
+    def test_image_sources(self):
+        testing, stable, edge = (self.snapshot(channel, name=channel) for channel in ('testing', 'stable', 'edge'))
+
+        def image(repository, channel):
+            with contextlib.redirect_stderr(io.StringIO()):
+                return checker.check_image_source(repository, channel, self.keyring)
+        self.assertEqual(image(stable, 'stable')['distribution'], 'aurora-stable')
+        self.assertEqual(image(edge, 'edge')['channel'], 'edge')
+        self.assertEqual(image(testing, 'edge')['channel'], 'testing')
+        self.assertEqual(image(testing, 'testing')['channel'], 'testing')
+        self.refused('an image of the stable channel does not install from a snapshot of the testing channel',
+                     image, testing, 'stable')
+        self.refused('an image of the testing channel does not install from a snapshot of the edge channel',
+                     image, edge, 'testing')
+        self.refused('an image of the stable channel does not install from a snapshot of the edge channel',
+                     image, edge, 'stable')
+        # Moved to Stable's directory, a Testing snapshot still names Testing.
+        (testing / 'dists/aurora').rename(testing / 'dists/aurora-stable')
+        self.refused("Release Suite is 'aurora', not 'aurora-stable'", image, testing, 'stable')
 
     def test_fresh_needs_a_recent_valid_until(self):
         three_days = self.snapshot(when=NOW - datetime.timedelta(days=3))
@@ -244,6 +299,123 @@ class SignedSnapshots(unittest.TestCase):
         self.check(output, 'edge', fresh=True)
 
 
+@unittest.skipUnless(HAVE_GPG, 'needs gpg and gpgv')
+class StageChannels(unittest.TestCase):
+    """scripts/stage-channels.py: what each channel serves when releases fail, and Stable promotion."""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp(prefix='aurora-stage-'))
+        self.addCleanup(shutil.rmtree, self.work, ignore_errors=True)
+        self.snapshots = {}
+        self.releases = []
+
+    def release(self, tag, channel=None, when=NOW, **options):
+        """Publish release tag holding a snapshot of channel (tag's own by default) signed at when."""
+        path = make_snapshot(self.work / 'snapshots' / tag, channel or tag.split('-')[0], when, **options)
+        self.snapshots[tag] = path
+        self.releases.append({'tag_name': tag, 'draft': False, 'assets': [{'name': stager.ASSET}]})
+        return path
+
+    def download(self, tag, directory):
+        archive = directory / stager.ASSET
+        with tarfile.open(archive, 'w') as snapshot:
+            snapshot.add(self.snapshots[tag], arcname='.')
+        return archive
+
+    def served(self, tag):
+        """The InRelease of release tag, as the channel's live Release file."""
+        channel = tag.split('-')[0]
+        return str(self.snapshots[tag] / 'dists' / signer.distribution(channel) / 'InRelease')
+
+    def stage(self, explicit=None, floors=None):
+        output = self.work / 'metadata'
+        shutil.rmtree(output, ignore_errors=True)
+        none = {channel: str(self.work / 'nothing-served') for channel in signer.CHANNELS}
+        with contextlib.redirect_stderr(io.StringIO()):
+            return stager.stage_all(explicit or {}, self.releases, KEYS['keyring'], output, self.download,
+                                    dict(none, **(floors or {})))
+
+    def test_releases_newest_first(self):
+        releases = [{'tag_name': tag, 'draft': draft, 'assets': [{'name': asset}]} for tag, draft, asset in (
+            ('testing-20261125.9', False, stager.ASSET), ('testing-20261125.10', False, stager.ASSET),
+            ('testing-20261126.1', True, stager.ASSET), ('testing-20261124.3', False, 'other.tar'),
+            ('stable-20261126.1', False, stager.ASSET), ('testing-latest', False, stager.ASSET))]
+        self.assertEqual(stager.releases_of(releases, 'testing'), ['testing-20261125.10', 'testing-20261125.9'])
+
+    def test_a_bad_release_falls_back_without_stopping_other_channels(self):
+        self.release('testing-20261126.1', when=NOW - datetime.timedelta(hours=2))
+        self.release('testing-20261126.2', channel='edge')
+        self.release('edge-20261126.1', channel='edge')
+        summary = self.stage()
+        self.assertEqual(summary['tags'], {'testing': 'testing-20261126.1', 'edge': 'edge-20261126.1'})
+        self.assertEqual(len(summary['failed']), 1)
+        self.assertIn('testing: testing-20261126.2:', summary['failed'][0])
+        self.assertTrue((self.work / 'metadata/testing/dists/aurora/InRelease').is_file())
+        self.assertTrue((self.work / 'metadata/edge/dists/aurora-edge/InRelease').is_file())
+
+    def test_a_channel_with_nothing_that_passes_is_reported_and_left_out(self):
+        self.release('testing-20261126.1')
+        self.release('nightly-20261126.1', channel='testing')
+        summary = self.stage()
+        self.assertEqual(summary['tags'], {'testing': 'testing-20261126.1'})
+        self.assertIn('nightly: no release passed; the channel is not served', summary['failed'])
+
+    def test_a_release_older_than_the_served_snapshot_is_skipped(self):
+        self.release('testing-20261125.1', when=NOW - datetime.timedelta(days=1))
+        self.release('testing-20261126.1', when=NOW - datetime.timedelta(days=2))
+        summary = self.stage(floors={'testing': self.served('testing-20261125.1')})
+        self.assertEqual(summary['tags'], {'testing': 'testing-20261125.1'})
+        self.assertIn('a channel does not roll back', summary['failed'][0])
+
+    def test_a_given_tag_that_fails_falls_back_and_is_reported(self):
+        self.release('testing-20261126.1')
+        self.release('testing-20261126.2', channel='stable')
+        summary = self.stage({'testing': 'testing-20261126.2'})
+        self.assertEqual(summary['tags'], {'testing': 'testing-20261126.1'})
+        self.assertIn('testing: testing-20261126.2:', summary['failed'][0])
+        summary = self.stage({'testing': 'edge-20261126.1'})
+        self.assertIn('testing: edge-20261126.1 is not a testing release tag', summary['failed'])
+
+    def test_stable_keeps_what_it_serves(self):
+        self.release('stable-20261120.1', when=NOW - datetime.timedelta(days=6))
+        self.release('stable-20261125.1', when=NOW - datetime.timedelta(days=1))
+        self.release('stable-20261126.1', channel='testing')
+        summary = self.stage(floors={'stable': self.served('stable-20261120.1')})
+        self.assertEqual(summary['tags'], {'stable': 'stable-20261120.1'})
+        self.assertEqual(summary['failed'], [])
+        self.assertFalse(summary['stable-promotion'])
+        # Nothing served, nothing staged, and that is no failure.
+        summary = self.stage()
+        self.assertEqual((summary['tags'], summary['failed']), ({}, []))
+
+    def test_stable_promotion_only_when_given(self):
+        self.release('stable-20261120.1', when=NOW - datetime.timedelta(days=6))
+        self.release('stable-20261125.1', when=NOW - datetime.timedelta(days=1))
+        floors = {'stable': self.served('stable-20261120.1')}
+        summary = self.stage({'stable': 'stable-20261125.1'}, floors)
+        self.assertEqual(summary['tags'], {'stable': 'stable-20261125.1'})
+        self.assertTrue(summary['stable-promotion'])
+        summary = self.stage({'stable': 'stable-20261120.1'}, floors)
+        self.assertFalse(summary['stable-promotion'])
+        # The first Stable snapshot is a promotion too.
+        self.assertTrue(self.stage({'stable': 'stable-20261125.1'})['stable-promotion'])
+
+    def test_a_given_stable_tag_that_fails_keeps_the_served_snapshot(self):
+        self.release('stable-20261120.1', when=NOW - datetime.timedelta(days=6))
+        self.release('stable-20261126.1', channel='testing')
+        summary = self.stage({'stable': 'stable-20261126.1'}, {'stable': self.served('stable-20261120.1')})
+        self.assertEqual(summary['tags'], {'stable': 'stable-20261120.1'})
+        self.assertFalse(summary['stable-promotion'])
+        self.assertIn('stable: stable-20261126.1:', summary['failed'][0])
+
+    def test_stable_whose_served_release_is_gone_is_reported(self):
+        served = make_snapshot(self.work / 'gone', 'stable', NOW - datetime.timedelta(days=6))
+        self.release('stable-20261125.1', when=NOW - datetime.timedelta(days=1))
+        summary = self.stage(floors={'stable': str(served / 'dists/aurora-stable/InRelease')})
+        self.assertEqual(summary['tags'], {})
+        self.assertIn('Stable is not served', summary['failed'][0])
+
+
 @unittest.skipUnless(HAVE_GPG and shutil.which('apt-get'), 'needs apt-get, gpg and gpgv')
 class AptClient(unittest.TestCase):
     """apt-get update against a copy: repository, with nothing of the host's apt configuration."""
@@ -286,7 +458,8 @@ class AptClient(unittest.TestCase):
     def stored_date(self):
         lists = list((self.work / 'state/lists').glob('*_InRelease'))
         self.assertEqual(len(lists), 1, lists)
-        return signer.parse_release(lists[0].read_text())['Date']
+        # The Date line of the signed text; the file is clearsigned.
+        return re.search(r'^Date: (.+)$', lists[0].read_text(), re.MULTILINE)[1]
 
     def test_expired_release_is_refused(self):
         now = datetime.datetime.now(datetime.timezone.utc)

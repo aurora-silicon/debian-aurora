@@ -7,7 +7,9 @@
 # signed Aurora package repository the image installs from: an https URL, or
 # a local directory (scripts/sign-repository.py output), served on loopback
 # while the image is built. CHANNEL (testing, stable or edge) is the feed the
-# installed system follows afterwards. The Debian base comes from the
+# installed system follows afterwards. A Stable image installs only from a
+# Stable snapshot; any other image from its own channel's or a Testing one
+# (scripts/check-repository.py --image). The Debian base comes from the
 # snapshot pinned in images/base.json.
 #
 # Follows alarm-aurora's scripts/build-image step for step; see
@@ -22,6 +24,9 @@ profile=${1:?debian-kde, debian-gnome or debian-minimal required}
 repository=${2:?signed Aurora package repository required}
 channel=${3:-testing}
 [[ $profile =~ ^debian-(kde|gnome|minimal)$ && $channel =~ ^(testing|stable|edge)$ ]]
+# Each channel's Release file names its own distribution (scripts/sign-repository.py).
+distribution=aurora
+[[ $channel == testing ]] || distribution=aurora-$channel
 [[ $(id -u) == 0 && $(uname -m) == aarch64 ]]
 desktop=${profile#debian-}
 # The key that signs the repository: the production key, or the local
@@ -61,15 +66,29 @@ trap cleanup EXIT
 
 # A local repository is served on loopback, so apt reaches it at the same URL
 # outside the image (bootstrap) and inside it (package installation).
+# The snapshot's distribution: checked here for a local one, the first of the
+# image channel's and (except for Stable) Testing's that a remote one serves.
+source_distribution=''
 if [[ -d $repository ]]; then
+  checked=$(mktemp)
+  gpg --batch --yes --dearmor --output "$checked" "$key"
+  source_distribution=$(python3 "$root/scripts/check-repository.py" --repository "$repository" --image "$channel" \
+    --keyring "$checked" | python3 -c 'import json, sys; print(json.load(sys.stdin)["distribution"])')
+  rm -f "$checked"
   port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
   python3 -m http.server --bind 127.0.0.1 --directory "$repository" "$port" >/dev/null 2>&1 &
   server=$!
   repository=http://127.0.0.1:$port
-  for _ in $(seq 50); do curl -fsS "$repository/dists/aurora/InRelease" >/dev/null 2>&1 && break; sleep 0.1; done
+  for _ in $(seq 50); do curl -fsS "$repository/dists/$source_distribution/InRelease" >/dev/null 2>&1 && break; sleep 0.1; done
+else
+  candidates=("$distribution")
+  [[ $channel == stable || $channel == testing ]] || candidates+=(aurora)
+  for candidate in "${candidates[@]}"; do
+    if curl -fsS "$repository/dists/$candidate/InRelease" >/dev/null 2>&1; then source_distribution=$candidate; break; fi
+  done
 fi
-[[ $repository =~ ^https?:// ]]
-curl -fsS "$repository/dists/aurora/InRelease" >/dev/null
+[[ $repository =~ ^https?:// && -n $source_distribution ]]
+curl -fsS "$repository/dists/$source_distribution/InRelease" >/dev/null
 
 loop=$(losetup --find --show --partscan --sector-size 4096 "$image")
 udevadm settle
@@ -105,8 +124,8 @@ cp -L /etc/resolv.conf "$mountroot/etc/resolv.conf"
 # the pin aurora-archive-keyring installs (written here too, for the build).
 install -d -m 0755 "$mountroot/etc/apt/keyrings" "$mountroot/etc/apt/preferences.d"
 gpg --batch --dearmor < "$key" > "$mountroot/etc/apt/keyrings/aurora-build.gpg"
-printf 'Types: deb\nURIs: %s\nSuites: aurora\nComponents: main\nSigned-By: /etc/apt/keyrings/aurora-build.gpg\n' \
-  "$repository" > "$mountroot/etc/apt/sources.list.d/aurora-build.sources"
+printf 'Types: deb\nURIs: %s\nSuites: %s\nComponents: main\nSigned-By: /etc/apt/keyrings/aurora-build.gpg\n' \
+  "$repository" "$source_distribution" > "$mountroot/etc/apt/sources.list.d/aurora-build.sources"
 cp "$root/packages/aurora-archive-keyring/aurora.pref" "$mountroot/etc/apt/preferences.d/aurora.pref"
 # Debian's default GRUB settings, which the image extends below; only the
 # full grub-efi-arm64 package would install them, and it reinstalls GRUB on
@@ -162,7 +181,8 @@ done
 # one Aurora's repository carries.
 mesa_version=$(chroot "$mountroot" dpkg-query -W -f '${Version}' libgl1-mesa-dri)
 chroot "$mountroot" apt-cache madison libgl1-mesa-dri |
-  awk -F ' [|] ' -v version="$mesa_version" '$2 == version && $3 ~ / aurora\/main / { found = 1 } END { exit !found }'
+  awk -F ' [|] ' -v version="$mesa_version" -v source=" $source_distribution/main " \
+    '$2 == version && index($3, source) { found = 1 } END { exit !found }'
 for package in mesa-vulkan-drivers libegl-mesa0; do
   [[ $(chroot "$mountroot" dpkg-query -W -f '${Version}' "$package") == "$mesa_version" ]]
 done
@@ -299,15 +319,9 @@ if [[ -e $mountroot/usr/share/aura/monitor-free ]]; then monitor_free=true; fi
 rm -f "$mountroot/etc/apt/sources.list.d/aurora-build.sources" "$mountroot/etc/apt/keyrings/aurora-build.gpg"
 rm -f "$mountroot/etc/apt/sources.list"
 # mmdebstrap keeps its --aptopt options in 99mmdebstrap; they are for the
-# pinned snapshots above. The installed system refuses an expired Release file.
+# pinned snapshots above. The installed system refuses an expired Release file
+# (check-basics.py's apt check).
 rm -f "$mountroot/etc/apt/apt.conf.d/99mmdebstrap"
-if grep -rqsiE 'Check-Valid-Until[[:space:]]*"?(false|no|0|off)\b' "$mountroot/etc/apt/apt.conf" "$mountroot/etc/apt/apt.conf.d"; then
-  echo "The image's apt configuration turns off the Valid-Until check" >&2
-  exit 1
-fi
-# Each channel's Release file names its own distribution (scripts/sign-repository.py).
-distribution=aurora
-[[ $channel == testing ]] || distribution=aurora-$channel
 printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates\nComponents: %s\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: https://security.debian.org/debian-security\nSuites: %s-security\nComponents: %s\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n' \
   "$live_mirror" "$suite" "$suite" "$components" "$suite" "$components" > "$mountroot/etc/apt/sources.list.d/debian.sources"
 printf 'Types: deb\nURIs: https://aurorasilicon.org/debian-aurora/%s\nSuites: %s\nComponents: main\nSigned-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n' \

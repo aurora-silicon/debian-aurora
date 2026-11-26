@@ -7,7 +7,7 @@ on:
         options: [debian-minimal, debian-kde, debian-gnome]
         default: debian-minimal
       release-tag:
-        description: Immutable signed Debian Aurora package snapshot (testing-YYYYMMDD.N)
+        description: Immutable signed Debian Aurora package snapshot (testing-, stable- or edge-YYYYMMDD.N)
         required: true
       channel:
         description: Update channel the installed system follows
@@ -33,19 +33,23 @@ jobs:
         with:
           persist-credentials: false
       # The image installs from this snapshot; apt checks its signature with
-      # the key aurora-archive-keyring pins (AURORA_ARCHIVE_KEY's default).
-      - name: Fetch the signed package snapshot
+      # the key aurora-archive-keyring pins (AURORA_ARCHIVE_KEY's default). A
+      # Stable image installs only a Stable snapshot, any other image its own
+      # channel's or a Testing one (scripts/check-repository.py --image).
+      - name: Fetch and check the signed package snapshot
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release-tag }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
-          [[ $RELEASE_TAG =~ ^testing-[0-9]{8}\.[0-9]+$ ]]
+          [[ $RELEASE_TAG =~ ^(testing|stable|edge)-[0-9]{8}\.[0-9]+$ ]]
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/snapshot" \
             --pattern debian-aurora-repository.tar
           mkdir -p out/repository
           tar -C out/repository --no-same-owner -xf "$RUNNER_TEMP/snapshot/debian-aurora-repository.tar"
-          test -s out/repository/dists/aurora/InRelease
+          python3 scripts/check-repository.py --repository out/repository --image "$CHANNEL" \
+            --keyring "$(bash scripts/archive-keyring "$RUNNER_TEMP")"
       # The finalizer is the aurora-platform pin in sources.json
       # (aurora-firstboot); it seals debian-* profiles only once that pin
       # includes aurora-platform's Debian support.
@@ -59,7 +63,7 @@ jobs:
             debian:testing bash -euo pipefail -c '
               apt-get update -qq
               DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends btrfs-progs \
-                ca-certificates curl debian-archive-keyring dosfstools e2fsprogs fdisk gnupg mmdebstrap mount \
+                ca-certificates curl debian-archive-keyring dosfstools e2fsprogs fdisk gnupg gpgv mmdebstrap mount \
                 python3 udev util-linux zstd >/dev/null
               bash scripts/build-image "$1" out/repository "$2"
             ' image "$PROFILE" "$CHANNEL" 2>&1 | tee image-build.log
