@@ -197,6 +197,9 @@ jobs:
 
   publish:
     needs: sign
+    # GitHub Actions skips downstream jobs with an implicit success() when any
+    # transitive ancestor (level2/level3) was skipped, even after sign succeeds.
+    if: ${{ !cancelled() && needs.sign.result == 'success' }}
     runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.publish.outputs.tag }}
@@ -226,6 +229,7 @@ jobs:
 
   deploy:
     needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     uses: ./.github/workflows/deploy-pages.yml
     permissions:
       contents: read
