@@ -20,6 +20,9 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
+import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime.datetime(2026, 11, 26, 12, 0, tzinfo=datetime.timezone.utc)
@@ -194,6 +197,16 @@ class SignedSnapshots(unittest.TestCase):
         self.refused('is not the one the channel serves', self.check, newer, 'stable', floor=floor, hold=True)
         self.refused('serves (none)', self.check, newer, 'stable', floor=str(self.work / 'none'), hold=True)
 
+    def test_not_behind_what_the_channel_serves_now(self):
+        served = self.snapshot(name='served')
+        floor = str(served / 'dists/aurora/InRelease')
+        behind = signer.format_date(NOW - datetime.timedelta(days=1))
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(checker.check_not_behind('testing', self.keyring, signer.format_date(NOW), floor)
+                             ['served-snapshot-date'], signer.format_date(NOW))
+            checker.check_not_behind('testing', self.keyring, behind, str(self.work / 'none'))
+        self.refused('now serves a snapshot signed', checker.check_not_behind, 'testing', self.keyring, behind, floor)
+
     def test_image_sources(self):
         testing, stable, edge = (self.snapshot(channel, name=channel) for channel in ('testing', 'stable', 'edge'))
 
@@ -353,12 +366,57 @@ class StageChannels(unittest.TestCase):
         self.assertTrue((self.work / 'metadata/testing/dists/aurora/InRelease').is_file())
         self.assertTrue((self.work / 'metadata/edge/dists/aurora-edge/InRelease').is_file())
 
-    def test_a_channel_with_nothing_that_passes_is_reported_and_left_out(self):
+    def test_an_unserved_channel_with_nothing_that_passes_is_reported_and_left_out(self):
         self.release('testing-20261126.1')
         self.release('nightly-20261126.1', channel='testing')
         summary = self.stage()
         self.assertEqual(summary['tags'], {'testing': 'testing-20261126.1'})
-        self.assertIn('nightly: no release passed; the channel is not served', summary['failed'])
+        self.assertIn('nightly: no release passed; the channel stays unserved', summary['failed'])
+        self.assertEqual(summary['fatal'], [])
+
+    def test_a_served_channel_that_cannot_be_staged_stops_the_deployment(self):
+        served = make_snapshot(self.work / 'served', 'testing', NOW - datetime.timedelta(days=1))
+        self.release('testing-20261126.1', channel='edge')
+        self.release('edge-20261126.1')
+        summary = self.stage(floors={'testing': str(served / 'dists/aurora/InRelease')})
+        self.assertEqual(summary['fatal'], ['testing'])
+        self.assertIn('testing: no release of the snapshot it serves', summary['failed'][-1])
+        # A served channel without any release left stops it too.
+        self.releases = [release for release in self.releases if release['tag_name'].startswith('edge')]
+        self.assertEqual(self.stage(floors={'testing': str(served / 'dists/aurora/InRelease')})['fatal'],
+                         ['testing'])
+
+    def live(self, failure):
+        """stage() with the live Testing Release file answering failure."""
+        floors = {'testing': 'https://aurorasilicon.org/debian-aurora/testing/dists/aurora/InRelease'}
+        with mock.patch.object(urllib.request, 'urlopen', side_effect=failure), \
+                mock.patch.object(stager.checker.time, 'sleep'):
+            return self.stage(floors=floors)
+
+    def test_a_channel_whose_live_release_file_cannot_be_read_stops_the_deployment(self):
+        self.release('testing-20261126.1')
+        for failure in (urllib.error.HTTPError('', 503, 'Service Unavailable', {}, None),
+                        urllib.error.URLError('timed out')):
+            with self.subTest(failure=failure):
+                summary = self.live(failure)
+                self.assertEqual(summary['fatal'], ['testing'])
+                self.assertIn('testing: cannot tell what the channel serves', summary['failed'][0])
+
+    def test_a_channel_whose_live_release_file_is_not_there_is_staged_without_a_floor(self):
+        self.release('testing-20261126.1')
+        summary = self.live(urllib.error.HTTPError('', 404, 'Not Found', {}, None))
+        self.assertEqual((summary['tags'], summary['fatal']), ({'testing': 'testing-20261126.1'}, []))
+
+    def test_the_command_fails_when_a_served_channel_cannot_be_staged(self):
+        releases = self.work / 'releases.json'
+        releases.write_text('[]')
+        arguments = ['stage-channels.py', '--releases', str(releases), '--keyring', str(KEYS['keyring']),
+                     '--output', str(self.work / 'out')]
+        for fatal, status in ((['testing'], 1), ([], 0)):
+            summary = {'tags': {}, 'failed': [], 'fatal': fatal, 'stable-promotion': False, 'snapshots': {}}
+            with mock.patch.object(stager, 'stage_all', return_value=summary), mock.patch('sys.argv', arguments), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(stager.main(), status)
 
     def test_a_release_older_than_the_served_snapshot_is_skipped(self):
         self.release('testing-20261125.1', when=NOW - datetime.timedelta(days=1))
@@ -408,12 +466,12 @@ class StageChannels(unittest.TestCase):
         self.assertFalse(summary['stable-promotion'])
         self.assertIn('stable: stable-20261126.1:', summary['failed'][0])
 
-    def test_stable_whose_served_release_is_gone_is_reported(self):
+    def test_stable_whose_served_release_is_gone_stops_the_deployment(self):
         served = make_snapshot(self.work / 'gone', 'stable', NOW - datetime.timedelta(days=6))
         self.release('stable-20261125.1', when=NOW - datetime.timedelta(days=1))
         summary = self.stage(floors={'stable': str(served / 'dists/aurora-stable/InRelease')})
-        self.assertEqual(summary['tags'], {})
-        self.assertIn('Stable is not served', summary['failed'][0])
+        self.assertEqual((summary['tags'], summary['fatal']), ({}, ['stable']))
+        self.assertIn('stable: no release of the snapshot it serves', summary['failed'][-1])
 
 
 @unittest.skipUnless(HAVE_GPG and shutil.which('apt-get'), 'needs apt-get, gpg and gpgv')

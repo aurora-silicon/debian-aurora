@@ -18,8 +18,13 @@ approval.
 
 A given tag or newer release that fails is reported, and the next one that
 passes is staged instead, so one bad release does not stop every channel being
-signed again. Writes DIR/<channel>/dists/<distribution>/InRelease for each
-staged channel and prints {"tags": {channel: tag}, "failed": [...],
+signed again. The deployment replaces the whole site, so a channel that is
+served, or whose live Release file cannot be read, has to be staged: if it
+cannot be, this exits 1 and nothing is deployed. Only a channel that is not
+served (its live Release file answers 404) may be left out.
+
+Writes DIR/<channel>/dists/<distribution>/InRelease for each staged channel
+and prints {"tags": {channel: tag}, "failed": [...], "fatal": [channel...],
 "stable-promotion": bool} as JSON; --releases is the repository's releases as
 the GitHub API lists them.
 """
@@ -73,19 +78,22 @@ def download(tag, directory):
 
 
 def stage(channel, explicit, releases, keyring, output, download=download, floor=None):
-    """Stage channel's snapshot. Returns (tag or None, check result, failures, whether Stable is promoted)."""
+    """Stage channel's snapshot.
+
+    Returns (tag or None, check result, failures, fatal, whether Stable is promoted). A channel that is
+    served, or whose live Release file could not be read, must be staged: the deployment replaces the
+    whole site, and leaving it out would take it away from the systems that follow it. fatal says that
+    one could not be.
+    """
     try:
         served = checker.served_snapshot(floor or checker.live_floor(channel), keyring, channel)
     except SystemExit as error:
-        return None, None, [f'{channel}: {error}'], False
+        return None, None, [f'{channel}: cannot tell what the channel serves: {error}'], True, False
     if channel == 'stable' and not explicit and served is None:
-        return None, None, [], False
+        return None, None, [], False, False
     failures = []
     candidates = ([explicit] if explicit else []) + [tag for tag in releases_of(releases, channel)[:TRIES]
                                                       if tag != explicit]
-    if not candidates:
-        # A channel with no releases is not served; one that is served now has lost them.
-        return None, None, [] if served is None else [f'{channel}: no releases; the channel is not served'], False
     for tag in candidates:
         match = TAG.fullmatch(tag)
         if not match or match['channel'] != channel:
@@ -117,20 +125,24 @@ def stage(channel, explicit, releases, keyring, output, download=download, floor
             shutil.copy2(repository / 'dists' / result['distribution'] / 'InRelease', staged / 'InRelease')
         snapshot = checker.signer.parse_date(result['snapshot-date'], 'snapshot date')
         promoted = channel == 'stable' and not hold and (served is None or snapshot != served[1])
-        return tag, result, failures, promoted
-    if channel == 'stable' and served is not None:
-        return None, None, failures + [f'stable: no release of the snapshot Stable serves (signed {served[0]}) '
-                                       'passed; Stable is not served'], False
-    return None, None, failures + [f'{channel}: no release passed; the channel is not served'], False
+        return tag, result, failures, False, promoted
+    if served is not None:
+        return None, None, failures + [f'{channel}: no release of the snapshot it serves (signed {served[0]}) or '
+                                       'a newer one passed'], True, False
+    if candidates:
+        failures.append(f'{channel}: no release passed; the channel stays unserved')
+    return None, None, failures, False, False
 
 
 def stage_all(explicit, releases, keyring, output, download=download, floors=None):
     """Stage every channel; explicit and floors map channels to a given tag and a floor."""
-    summary = {'tags': {}, 'failed': [], 'stable-promotion': False, 'snapshots': {}}
+    summary = {'tags': {}, 'failed': [], 'fatal': [], 'stable-promotion': False, 'snapshots': {}}
     for channel in checker.signer.CHANNELS:
-        tag, result, failures, promoted = stage(channel, explicit.get(channel), releases, keyring, output,
-                                                download, (floors or {}).get(channel))
+        tag, result, failures, fatal, promoted = stage(channel, explicit.get(channel), releases, keyring, output,
+                                                       download, (floors or {}).get(channel))
         summary['failed'] += failures
+        if fatal:
+            summary['fatal'].append(channel)
         if tag:
             summary['tags'][channel] = tag
             summary['snapshots'][channel] = result
@@ -154,7 +166,11 @@ def main():
     for failure in summary['failed']:
         print(failure, file=sys.stderr)
     print(json.dumps(summary))
+    if summary['fatal']:
+        print(f'not deploying: {", ".join(summary["fatal"])} would leave the site', file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

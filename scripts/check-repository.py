@@ -3,6 +3,7 @@
 
     check-repository.py --repository DIR --channel testing --keyring FILE [--fresh] [--floor [URL|FILE]] [--hold]
     check-repository.py --repository DIR --image stable --keyring FILE
+    check-repository.py --snapshot-date DATE --channel testing --keyring FILE --floor [URL|FILE]
 
 Refuses the snapshot unless:
 - InRelease and Release.gpg verify with the keyring and sign the same Release;
@@ -20,6 +21,9 @@ Refuses the snapshot unless:
 --image takes the snapshot's channel from its distribution and refuses one an
 image of that channel must not install from: a Stable image installs only a
 Stable snapshot, and any other image its own channel's or a Testing one.
+
+--snapshot-date checks only that the channel serves no snapshot newer than the
+one of that date: deploy-pages.yml's last check before it replaces the site.
 
 Prints the channel, distribution, snapshot date and validity as JSON.
 """
@@ -126,6 +130,16 @@ def check(repository, channel, keyring, fresh=False, floor=None, now=None, serve
             'valid-until': fields.get('Valid-Until'), 'served-snapshot-date': served[0] if served else None}
 
 
+def check_not_behind(channel, keyring, snapshot_date, floor):
+    """Refuse when the Release file at floor was signed for a newer snapshot than the one of snapshot_date."""
+    snapshot = signer.parse_date(snapshot_date, 'snapshot date')
+    served = served_snapshot(floor, keyring, channel)
+    if served is not None and snapshot < served[1]:
+        raise SystemExit(f'the {channel} channel now serves a snapshot signed {served[0]}, newer than this '
+                         f'one, signed {snapshot_date}; a channel does not roll back')
+    return {'channel': channel, 'snapshot-date': snapshot_date, 'served-snapshot-date': served[0] if served else None}
+
+
 def snapshot_channel(repository):
     """The channel whose distribution is repository's only one."""
     found = sorted(path.name for path in (repository / 'dists').iterdir()) if (repository / 'dists').is_dir() else []
@@ -145,7 +159,10 @@ def check_image_source(repository, image, keyring):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--repository', type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--repository', type=Path)
+    source.add_argument('--snapshot-date', metavar='DATE',
+                        help='check only that the channel serves no newer snapshot than the one of DATE')
     purpose = parser.add_mutually_exclusive_group(required=True)
     purpose.add_argument('--channel', choices=signer.CHANNELS, help='the channel that will serve the snapshot')
     purpose.add_argument('--image', choices=signer.CHANNELS, help='the channel an image built from it follows')
@@ -160,8 +177,13 @@ def main():
         parser.error('--image takes no --fresh, --floor or --hold')
     if args.hold and not args.floor:
         parser.error('--hold needs --floor')
+    if args.snapshot_date and (args.image or args.fresh or args.hold or not args.floor):
+        parser.error('--snapshot-date takes --channel and --floor only')
     try:
-        if args.image:
+        if args.snapshot_date:
+            floor = live_floor(args.channel) if args.floor == 'live' else args.floor
+            result = check_not_behind(args.channel, args.keyring, args.snapshot_date, floor)
+        elif args.image:
             result = check_image_source(args.repository, args.image, args.keyring)
         else:
             floor = live_floor(args.channel) if args.floor == 'live' else args.floor
