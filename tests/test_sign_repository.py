@@ -207,6 +207,37 @@ class SignedSnapshots(unittest.TestCase):
             checker.check_not_behind('testing', self.keyring, behind, str(self.work / 'none'))
         self.refused('now serves a snapshot signed', checker.check_not_behind, 'testing', self.keyring, behind, floor)
 
+    def test_a_deployment_does_not_remove_a_channel_that_went_live(self):
+        testing, stable = self.snapshot(name='testing'), self.snapshot('stable', name='stable')
+        floors = {channel: str(self.work / 'nothing-served') for channel in signer.CHANNELS}
+        floors['testing'] = str(testing / 'dists/aurora/InRelease')
+        now, before = signer.format_date(NOW), signer.format_date(NOW - datetime.timedelta(days=1))
+
+        def deploy(snapshots):
+            with contextlib.redirect_stderr(io.StringIO()):
+                return checker.check_deployment(snapshots, self.keyring, floors)
+        self.assertIsNone(deploy({'testing': now})['stable'])
+        # Stable went live after this run staged without it.
+        floors['stable'] = str(stable / 'dists/aurora-stable/InRelease')
+        self.refused('the stable channel is served now', deploy, {'testing': now})
+        self.assertEqual(deploy({'testing': now, 'stable': now})['stable']['served-snapshot-date'], now)
+        self.refused('a channel does not roll back', deploy, {'testing': now, 'stable': before})
+        self.refused('unknown channels', deploy, {'testing': now, 'stable': now, 'aurora': now})
+
+    def test_a_deployment_stops_when_a_left_out_channel_cannot_be_read(self):
+        floors = {channel: str(self.work / 'nothing-served') for channel in signer.CHANNELS}
+        floors['edge'] = 'https://aurorasilicon.org/debian-aurora/edge/dists/aurora-edge/InRelease'
+        for failure, refused in ((urllib.error.HTTPError('', 503, 'Service Unavailable', {}, None), True),
+                                 (urllib.error.URLError('timed out'), True),
+                                 (urllib.error.HTTPError('', 404, 'Not Found', {}, None), False)):
+            with self.subTest(failure=failure), mock.patch.object(urllib.request, 'urlopen', side_effect=failure), \
+                    mock.patch.object(checker.time, 'sleep'):
+                if refused:
+                    self.refused("cannot read the edge channel's live Release file", checker.check_deployment, {},
+                                 self.keyring, floors)
+                else:
+                    self.assertIsNone(checker.check_deployment({}, self.keyring, floors)['edge'])
+
     def test_image_sources(self):
         testing, stable, edge = (self.snapshot(channel, name=channel) for channel in ('testing', 'stable', 'edge'))
 
