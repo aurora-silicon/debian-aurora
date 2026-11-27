@@ -39,6 +39,9 @@ them in software. `FEX_HOSTFEATURES=disableapflg` turns it off.
 fex-emu registers FEX for x86 and x86-64 programs in /usr/lib/binfmt.d.
 qemu-user-binfmt registers qemu for the same programs; with both installed,
 whichever systemd-binfmt registers last runs them.
+FEX is registered without the credentials flag (C), so the set-user-ID and
+set-group-ID bits of x86 programs have no effect: they run with the
+credentials of whoever starts them.
 
 ## Root filesystem
 
