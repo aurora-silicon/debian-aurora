@@ -1,6 +1,6 @@
 {
   "source": "uboot-aurora",
-  "version": "2026.07.aurora11-1",
+  "version": "2026.07.aurora12-1",
   "kind": "upstream",
   "upstream": {"pin": "uboot-aurora"},
   "changes": "Aurora's common Apple Silicon U-Boot with the MacBook Neo MTP handoff, built as alarm-aurora builds it (apple_m1_defconfig); update-m1n1 combines it with aura and the kernel's device trees.",
