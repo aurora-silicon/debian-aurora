@@ -1,6 +1,6 @@
 {
   "source": "linux-aurora",
-  "version": "7.3.0-2",
+  "version": "7.3.0-3",
   "kind": "upstream",
   "upstream": {"pin": "kernel-aurora"},
   "network": true,

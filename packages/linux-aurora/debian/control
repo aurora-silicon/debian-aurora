@@ -11,7 +11,7 @@ Standards-Version: 4.7.2
 Homepage: https://github.com/aurora-silicon/linux
 Rules-Requires-Root: no
 
-Package: linux-image-7.3.0-2-aurora
+Package: linux-image-7.3.0-3-aurora
 Architecture: arm64
 Depends: kmod, dracut, aura (>= 1.0.0~b12), aurora-audio, avd-fw, aurora-stage2-trial, aurora-userpages,
  ${misc:Depends}
@@ -25,17 +25,17 @@ Description: Linux 7.3.0 for Apple Silicon Macs (Aurora)
  It pairs with the pinned aura: an aura without the monitor needs this
  kernel's CTXR execution window (aurora-ctxr-execmem).
 
-Package: linux-headers-7.3.0-2-aurora
+Package: linux-headers-7.3.0-3-aurora
 Architecture: arm64
 Build-Profiles: <!cross>
 Depends: pahole, ${shlibs:Depends}, ${misc:Depends}
-Description: Header files for Linux 7.3.0-2-aurora
+Description: Header files for Linux 7.3.0-3-aurora
  Headers, configuration and build scripts for building out-of-tree modules
- against the Aurora kernel 7.3.0-2-aurora.
+ against the Aurora kernel 7.3.0-3-aurora.
 
 Package: linux-image-aurora
 Architecture: arm64
-Depends: linux-image-7.3.0-2-aurora, ${misc:Depends}
+Depends: linux-image-7.3.0-3-aurora, ${misc:Depends}
 Description: Aurora kernel for Apple Silicon Macs (latest)
  This package depends on the current Aurora kernel image, so that upgrades
  install new kernels alongside the running one.
@@ -43,7 +43,7 @@ Description: Aurora kernel for Apple Silicon Macs (latest)
 Package: linux-headers-aurora
 Architecture: arm64
 Build-Profiles: <!cross>
-Depends: linux-headers-7.3.0-2-aurora, ${misc:Depends}
+Depends: linux-headers-7.3.0-3-aurora, ${misc:Depends}
 Description: Header files for the latest Aurora kernel
  This package depends on the headers of the current Aurora kernel.
 
