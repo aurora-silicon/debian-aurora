@@ -16,12 +16,10 @@ permissions:
   attestations: write
 jobs:
   delivery:
-    # aurora-distributions must first accept Debian. At this pin
-    # build-payload.yml admits only fedora|arch|nixos-{kde,gnome,minimal} and
-    # omarchy-hyprland, maps no distribution to debian-aurora, and checks out
-    # an aurora-installer revision whose assemble-distribution-payload.py
-    # rejects debian-* profiles. Move the pin to the commit that adds Debian.
-    uses: aurora-silicon/aurora-distributions/.github/workflows/build-payload.yml@29deb019a23c45d0b0cadaf29f284c2f8d28d343
+    # Pinned to aurora-silicon/aurora-distributions#78 (admits debian-* from
+    # debian-aurora and selects the post-#191 65-model aurora-installer
+    # producer once aurora-distributions/main adopts the 65-model cohort).
+    uses: aurora-silicon/aurora-distributions/.github/workflows/build-payload.yml@15e7d1d72004ca8640c0b27d9747cbae684b40b0
     with:
       profile: ${{ inputs.profile }}
       image-run: ${{ inputs.image-run }}
