@@ -48,6 +48,11 @@ def logos(usr):
     write(usr / 'share/pixmaps/system-logo-white.png', b'\x89PNG\r\n\x1a\n')
 
 
+def aurora_source(channel, suite):
+    return (f'Types: deb\nURIs: https://aurorasilicon.org/debian-aurora/{channel}\nSuites: {suite}\n'
+            'Components: main\nSigned-By: /usr/share/keyrings/aurora-archive-keyring.gpg\n')
+
+
 # Touch ID as the Debian image should have it: pam-auth-update's common-auth
 # offers the fingerprint to sudo, sudo -i and polkit only, in front of the
 # password; the lock screens use their packages' fingerprint stacks; a short
@@ -131,6 +136,8 @@ class CheckBasicsTests(unittest.TestCase):
         write(u / 'lib/locale/locale-archive', b'\0en_US.utf8\0')
         link(e / 'systemd/system/multi-user.target.wants/NetworkManager.service',
              '/usr/lib/systemd/system/NetworkManager.service')
+        write(e / 'apt/sources.list.d/aurora.sources', aurora_source('testing', 'aurora'))
+        write(e / 'apt/apt.conf.d/20listchanges', 'APT::Periodic::Update-Package-Lists "1";\n')
         touchid_files(root, profile)
         if profile != 'minimal':
             logos(u)
@@ -187,6 +194,28 @@ class CheckBasicsTests(unittest.TestCase):
     def test_nothing_to_check_is_a_usage_error(self):
         self.assertEqual(self.check('--profile', 'minimal').returncode, 2)
         self.assertEqual(self.check('--profile', 'minimal', '--esp', str(self.base)).returncode, 2)
+
+    # apt
+
+    def test_each_channel_at_its_distribution_passes(self):
+        for channel, suite in (('stable', 'aurora-stable'), ('edge', 'aurora-edge')):
+            with self.subTest(channel=channel):
+                self.fresh()
+                self.assert_passes('minimal', lambda root: write(
+                    root / 'etc/apt/sources.list.d/aurora.sources', aurora_source(channel, suite)))
+
+    def test_channel_at_another_distribution_fails(self):
+        self.assert_fails('minimal', lambda root: write(root / 'etc/apt/sources.list.d/aurora.sources',
+                          aurora_source('stable', 'aurora')), "asks the stable channel for 'aurora', not aurora-stable")
+
+    def test_no_aurora_source_fails(self):
+        self.assert_fails('minimal', lambda root: (root / 'etc/apt/sources.list.d/aurora.sources').unlink(),
+                          'the image follows no Aurora channel')
+
+    def test_valid_until_check_turned_off_fails(self):
+        self.assert_fails('gnome', lambda root: write(root / 'etc/apt/apt.conf.d/99mmdebstrap',
+                          'Acquire::Check-Valid-Until "false";\nAcquire::Retries "5";\n'),
+                          "/etc/apt/apt.conf.d/99mmdebstrap turns off apt's Valid-Until check")
 
     # GL selection
 

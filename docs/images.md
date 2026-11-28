@@ -4,7 +4,7 @@
 scripts/build-image PROFILE REPOSITORY [CHANNEL]
 ```
 
-`PROFILE` is `debian-kde`, `debian-gnome` or `debian-minimal`. `REPOSITORY` is the signed Aurora package repository the image installs from: an https URL, or a local `scripts/sign-repository.py` output directory, which `build-image` serves on loopback so apt reaches it at the same URL outside and inside the image. `CHANNEL` (`testing`, `stable` or `edge`) is the Aurora feed the installed system follows. The build needs root on a disposable native arm64 builder, as the shared finalizer does. In CI, `images.yml` runs it in a privileged `debian:testing` container on `ubuntu-24.04-arm`, from a `testing-YYYYMMDD.N` package release.
+`PROFILE` is `debian-kde`, `debian-gnome` or `debian-minimal`. `REPOSITORY` is the signed Aurora package repository the image installs from: an https URL, or a local `scripts/sign-repository.py` output directory, which `build-image` serves on loopback so apt reaches it at the same URL outside and inside the image. `CHANNEL` (`testing`, `stable` or `edge`) is the Aurora feed the installed system follows. The build needs root on a disposable native arm64 builder, as the shared finalizer does. A Stable image installs only from a Stable snapshot, and any other image from its own channel's or a Testing one: `build-image` checks a local repository with `scripts/check-repository.py --image`, and takes a remote one's distribution from the channel. In CI, `images.yml` runs it in a privileged `debian:testing` container on `ubuntu-24.04-arm`, from a `testing-`, `stable-` or `edge-YYYYMMDD.N` package release it has checked the same way.
 
 ## The build
 
@@ -24,7 +24,7 @@ The build follows alarm-aurora's `scripts/build-image` step for step:
 ### Base system
 
 - alarm-aurora unpacks the signed Arch Linux ARM root filesystem and initializes a pacman keyring. Here, `mmdebstrap --variant=important` builds the base from the snapshot pinned in `images/base.json`, checked with Debian's archive keyring.
-- The built system follows live Debian testing (`testing`, `testing-updates`, `testing-security` on deb.debian.org) and `https://aurorasilicon.org/debian-aurora/<channel>`, signed with `aurora-archive-keyring`'s key. The build-time source and key are removed.
+- The built system follows live Debian testing (`testing`, `testing-updates`, `testing-security` on deb.debian.org) and `https://aurorasilicon.org/debian-aurora/<channel>` with the channel's distribution (`aurora` for Testing, `aurora-<channel>` otherwise), signed with `aurora-archive-keyring`'s key. The build-time source and key are removed, and so is `/etc/apt/apt.conf.d/99mmdebstrap`: mmdebstrap keeps its `--aptopt` options there, and the build's `Acquire::Check-Valid-Until "false"` is for the pinned snapshots only. The build fails if the image's apt configuration still turns that check off.
 
 ### The apt pin
 

@@ -1,5 +1,10 @@
 name: Deploy Debian Aurora apt repository to GitHub Pages
 on:
+  # A Release file is valid for seven days (scripts/sign-repository.py), so
+  # every served channel is signed again daily; a few missed runs do not
+  # expire a channel.
+  schedule:
+    - cron: '41 4 * * *'
   workflow_dispatch:
     inputs:
       testing-tag:
@@ -36,22 +41,32 @@ on:
         type: boolean
         default: false
 permissions: {}
-concurrency:
-  group: debian-aurora-pages
-  cancel-in-progress: false
+# Only the deploy job takes the debian-aurora-pages concurrency group, so a run
+# waiting at approve-stable holds up no other run's signing and deployment.
 defaults:
   run:
     shell: bash
 jobs:
-  assemble:
+  # Each channel serves the snapshot its tag names, or its newest release; one
+  # that fails falls back to the next release that passes and is reported by
+  # the verdict job after the others are deployed. A snapshot has to be signed
+  # for its channel and must not be older than the one the channel serves.
+  # Stable keeps the snapshot it serves unless stable-tag names another
+  # (scripts/stage-channels.py). The staged InRelease files go to the signer.
+  stage:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    outputs:
+      tags: ${{ steps.stage.outputs.tags }}
+      failed: ${{ steps.stage.outputs.failed }}
+      stable-promotion: ${{ steps.stage.outputs.stable-promotion }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - name: Verify signed snapshots and assemble apt repository site
+      - id: stage
+        name: Choose and verify the snapshot of each channel
         env:
           GH_TOKEN: ${{ github.token }}
           TESTING_TAG: ${{ inputs.testing-tag }}
@@ -62,83 +77,170 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnupg gpgv >/dev/null
-
-          # Verify the checked-in public key matches keys/fingerprint.txt before trusting it.
-          expected_fpr=$(awk 'NF {print $1; exit}' keys/fingerprint.txt)
-          actual_fpr=$(gpg --show-keys --with-colons packages/aurora-archive-keyring/keys/aurora-debian-archive.asc |
-            awk -F: '$1=="fpr" {print $10; exit}')
-          if [[ -z $expected_fpr || $actual_fpr != "$expected_fpr" ]]; then
-            echo "Archive public key fingerprint ($actual_fpr) does not match keys/fingerprint.txt ($expected_fpr)" >&2
+          keyring=$(bash scripts/archive-keyring "$RUNNER_TEMP")
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
+            | jq 'add // []' > "$RUNNER_TEMP/releases.json"
+          # A served channel that cannot be staged stops the run here, before
+          # anything is signed or deployed, and the site stays as it is.
+          status=0
+          python3 scripts/stage-channels.py --releases "$RUNNER_TEMP/releases.json" --keyring "$keyring" \
+            --output metadata --testing "$TESTING_TAG" --nightly "$NIGHTLY_TAG" --stable "$STABLE_TAG" \
+            --edge "$EDGE_TAG" > "$RUNNER_TEMP/staged.json" || status=$?
+          {
+            echo '```json'
+            jq . "$RUNNER_TEMP/staged.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          (( status == 0 ))
+          if [[ $(jq '.tags | length' "$RUNNER_TEMP/staged.json") == 0 ]]; then
+            echo "No channel has a snapshot that passes" >&2
             exit 1
           fi
-          keyring="$RUNNER_TEMP/aurora-archive-keyring.gpg"
-          gpg --dearmor --output "$keyring" packages/aurora-archive-keyring/keys/aurora-debian-archive.asc
+          {
+            echo "tags=$(jq -c .tags "$RUNNER_TEMP/staged.json")"
+            echo "failed=$(jq -c .failed "$RUNNER_TEMP/staged.json")"
+            echo "stable-promotion=$(jq -r '."stable-promotion"' "$RUNNER_TEMP/staged.json")"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-metadata
+          path: metadata/
+          retention-days: 1
+
+  # A Stable snapshot other than the one Stable serves waits for the
+  # stable-promotion environment, whose reviewers the repository owners set.
+  # Only a run given stable-tag gets here; scheduled and packages.yml runs keep
+  # Stable as it is, and do not wait for this one.
+  approve-stable:
+    needs: stage
+    if: ${{ !inputs.dry-run && needs.stage.outputs.stable-promotion == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: stable-promotion
+    permissions: {}
+    steps:
+      - name: Stable promotion approved
+        env:
+          TAGS: ${{ needs.stage.outputs.tags }}
+        run: jq -r '"Stable serves \(.stable) once this run deploys"' <<<"$TAGS"
+
+  # The signing key is only in the testing-signing environment, and it signs
+  # in a container without network. It signs each channel's Release file
+  # again with a new Date and Valid-Until; sign-repository.py --refresh
+  # changes nothing else and refuses a Release file of another channel.
+  refresh:
+    needs: [stage, approve-stable]
+    if: >-
+      ${{ !cancelled() && !inputs.dry-run && needs.stage.result == 'success'
+      && (needs.approve-stable.result == 'success' || needs.approve-stable.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    environment: testing-signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-metadata
+          path: metadata
+      - name: Prepare the isolated signer before loading credentials
+        run: |
+          docker build -t debian-aurora-signer - <<'EOF'
+          FROM debian:testing
+          RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                apt-utils gnupg gpgv python3 xz-utils && rm -rf /var/lib/apt/lists/*
+          EOF
+      - name: Sign each channel's Release file again
+        env:
+          DEBIAN_SIGNING_KEY: ${{ secrets.DEBIAN_SIGNING_KEY }}
+          DEBIAN_SIGNING_PASSPHRASE: ${{ secrets.DEBIAN_SIGNING_PASSPHRASE }}
+          TAGS: ${{ needs.stage.outputs.tags }}
+        run: |
+          set -euo pipefail
+          channels=$(jq -r 'keys[]' <<<"$TAGS")
+          docker run --rm --network none -e DEBIAN_SIGNING_KEY -e DEBIAN_SIGNING_PASSPHRASE -e CHANNELS="$channels" \
+            -v "$PWD:/src" -w /src debian-aurora-signer bash -euo pipefail -c '
+              export GNUPGHOME=$(mktemp -d) PYTHONDONTWRITEBYTECODE=1
+              printf "%s\n" "$DEBIAN_SIGNING_KEY" | gpg --batch --quiet --import
+              for channel in $CHANNELS; do
+                python3 scripts/sign-repository.py --production --refresh "metadata/$channel" --channel "$channel" \
+                  --output "refreshed/$channel"
+              done
+            '
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: refreshed-metadata
+          path: refreshed/
+          retention-days: 1
+
+  # The site is each staged snapshot with its newly signed Release file,
+  # checked again: signed for its channel, matching its indexes, fresh, and
+  # not older than what the channel serves. A dry run signs nothing and checks
+  # the snapshots as they were signed.
+  assemble:
+    needs: [stage, refresh]
+    if: ${{ !cancelled() && needs.stage.result == 'success' && (needs.refresh.result == 'success' || inputs.dry-run) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      snapshots: ${{ steps.assemble.outputs.snapshots }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: ${{ !inputs.dry-run }}
+        with:
+          name: refreshed-metadata
+          path: refreshed
+      - id: assemble
+        name: Assemble the apt repository site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ needs.stage.outputs.tags }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnupg gpgv >/dev/null
+          keyring=$(bash scripts/archive-keyring "$RUNNER_TEMP")
+          expected_fpr=$(awk 'NF {print $1; exit}' keys/fingerprint.txt)
 
           mkdir -p site
           touch site/.nojekyll
           cp packages/aurora-archive-keyring/keys/aurora-debian-archive.asc site/aurora-debian-archive.asc
 
-          releases_json="$RUNNER_TEMP/releases.json"
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
-            | jq 'add // []' > "$releases_json"
-
-          resolve_channel_tag() {
-            local channel=$1 explicit=$2
-            if [[ -n $explicit ]]; then
-              printf '%s\n' "$explicit"
-              return 0
-            fi
-            jq -r --arg ch "$channel" '
-              [ .[]
-                | select((.draft | not)
-                    and (.tag_name | test("^" + $ch + "-[0-9]{8}\\.[0-9]+$"))
-                    and any(.assets[]?; .name == "debian-aurora-repository.tar"))
-                | .tag_name
-              ]
-              | map({
-                  tag: .,
-                  date: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .d | tonumber),
-                  seq: (capture("^" + $ch + "-(?<d>[0-9]{8})\\.(?<n>[0-9]+)$") | .n | tonumber)
-                })
-              | sort_by(.date, .seq)
-              | last // empty
-              | .tag
-            ' "$releases_json"
-          }
-
           index_items=""
-          staged_count=0
-
-          stage_channel() {
-            local channel=$1 explicit=$2
-            local tag
-            tag=$(resolve_channel_tag "$channel" "$explicit")
-            [[ -n $tag ]] || return 0
-            if [[ ! $tag =~ ^${channel}-[0-9]{8}\.[0-9]+$ ]]; then
-              echo "Invalid release tag for $channel: $tag" >&2
-              exit 1
-            fi
-            local work="$RUNNER_TEMP/snap-$channel"
+          snapshots='{}'
+          for channel in $(jq -r 'keys[]' <<<"$TAGS"); do
+            tag=$(jq -r --arg channel "$channel" '.[$channel]' <<<"$TAGS")
+            [[ $tag =~ ^${channel}-[0-9]{8}\.[0-9]+$ ]]
+            work="$RUNNER_TEMP/snap-$channel"
             mkdir -p "$work" "site/$channel"
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$work" \
               --pattern debian-aurora-repository.tar
             tar -C "site/$channel" --no-same-owner -xf "$work/debian-aurora-repository.tar"
-            gpgv --keyring "$keyring" "site/$channel/dists/aurora/InRelease"
-            gpgv --keyring "$keyring" "site/$channel/dists/aurora/Release.gpg" "site/$channel/dists/aurora/Release"
-            index_items+="  <li><a href=\"${channel}/dists/aurora/InRelease\">${channel}</a> (${tag})</li>"$'\n'
-            staged_count=$((staged_count + 1))
-            echo "Verified and staged $channel -> $tag (gpgv OK against $expected_fpr)" >> "$GITHUB_STEP_SUMMARY"
-          }
-
-          stage_channel testing "$TESTING_TAG"
-          stage_channel nightly "$NIGHTLY_TAG"
-          stage_channel stable "$STABLE_TAG"
-          stage_channel edge "$EDGE_TAG"
-
-          if (( staged_count == 0 )); then
-            echo "No signed snapshot releases found for any channel" >&2
-            exit 1
-          fi
+            rm -rf "$work"
+            dists=(site/"$channel"/dists/*)
+            (( ${#dists[@]} == 1 ))
+            dist=${dists[0]##*/}
+            fresh=()
+            if [[ $DRY_RUN != true ]]; then
+              for file in Release InRelease Release.gpg; do
+                cp "refreshed/$channel/dists/$dist/$file" "site/$channel/dists/$dist/$file"
+              done
+              fresh=(--fresh)
+            fi
+            python3 scripts/check-repository.py --repository "site/$channel" --channel "$channel" \
+              --keyring "$keyring" "${fresh[@]}" --floor > "$RUNNER_TEMP/check-$channel.json"
+            index_items+="  <li><a href=\"${channel}/dists/${dist}/InRelease\">${channel}</a> (${tag})</li>"$'\n'
+            snapshots=$(jq -c --arg channel "$channel" '. + {($channel): $check[0]."snapshot-date"}' \
+              --slurpfile check "$RUNNER_TEMP/check-$channel.json" <<<"$snapshots")
+            echo "Staged $channel -> $tag: $(cat "$RUNNER_TEMP/check-$channel.json")" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "snapshots=$snapshots" >> "$GITHUB_OUTPUT"
 
           cat > site/index.html <<HTML
           <!doctype html>
@@ -158,17 +260,53 @@ jobs:
         with:
           path: site
 
+  # One deployment at a time. Another run may have deployed since this one's
+  # stage and assemble checked the live channels, so this checks them again.
   deploy:
     needs: assemble
     if: ${{ !inputs.dry-run }}
     runs-on: ubuntu-24.04
+    concurrency:
+      group: debian-aurora-pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     permissions:
+      contents: read
       pages: write
       id-token: write
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      # Every channel this site serves is no older than the one live now, and
+      # every channel it leaves out is still not served, so a run that staged
+      # before another deployed cannot roll a channel back or remove one.
+      - name: Check the site against what every channel serves now
+        env:
+          SNAPSHOTS: ${{ needs.assemble.outputs.snapshots }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnupg gpgv >/dev/null
+          keyring=$(bash scripts/archive-keyring "$RUNNER_TEMP")
+          python3 scripts/check-repository.py --deploying "$SNAPSHOTS" --keyring "$keyring"
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - id: deploy
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  # A channel whose given tag or newer releases failed was served from an
+  # older release, or not at all. That fails the run, after the deployment.
+  verdict:
+    needs: [stage, assemble, deploy]
+    if: ${{ !cancelled() && needs.stage.result == 'success' && needs.stage.outputs.failed != '[]' }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Report the releases that failed
+        env:
+          FAILED: ${{ needs.stage.outputs.failed }}
+        run: |
+          jq -r '.[]' <<<"$FAILED" >&2
+          exit 1

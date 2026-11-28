@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+# Images built before this version kept mmdebstrap's build-time apt options in
+# /etc/apt/apt.conf.d/99mmdebstrap, Acquire::Check-Valid-Until "false" among
+# them, so apt took Release files past their Valid-Until. On an upgrade from
+# such a version, remove the file if it is exactly what the image build wrote.
+if [ "$1" = configure ] && [ -n "$2" ] && dpkg --compare-versions "$2" lt 2026.11.4; then
+    conf="$DPKG_ROOT/etc/apt/apt.conf.d/99mmdebstrap"
+    if [ -f "$conf" ] && [ ! -L "$conf" ] &&
+        printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "5";\n' | cmp -s - "$conf"; then
+        rm -f "$conf"
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0
