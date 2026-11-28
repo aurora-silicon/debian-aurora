@@ -9,7 +9,7 @@ Debian testing (forky) counterparts of alarm-aurora's Secure Enclave, Touch ID a
 | aurora-sep | aurora-sep | aurora-sep (all) | native | 1.28 | built |
 | aurora-sep-luks | aurora-sep-luks | aurora-sep-luks | upstream | 0.3.0-1 | built |
 | aurora-sep-sk | aurora-sep-sk | aurora-sep-sk | upstream | 0.1.0-1 | built |
-| aurora-fido | aurora-fido | aurora-fido | upstream | 0.2.0-1 | built |
+| aurora-fido | aurora-fido | aurora-fido | upstream | 0.2.0-2 | built |
 | aurora-touchid-rearm | aurora-touchid-rearm | aurora-touchid-rearm | upstream | 1-1 | built |
 | libfprint-aurora | libfprint | libfprint-2-2, libfprint-2-dev, gir1.2-fprint-2.0, libfprint-2-doc, libfprint-2-tests | upstream (Debian's packaging) | 1:1.94.100-1+aurora1 | built |
 | fprintd-aurora | fprintd | fprintd, libpam-fprintd, fprintd-doc | rebuild | 1.94.5-4+aurora1 | built (cross) |
@@ -151,7 +151,7 @@ Start and restart behaviour:
 - **Depends:** aurora-sep, openssh-client (Debian's ssh-sk-helper already links libfido2) and systemd.
 - **Deviation:** the provider is in Debian's library directory instead of /usr/lib/libaurora-sep-sk.so. The upstream ssh-sk.md shows Fedora's /usr/lib64 path.
 
-### aurora-fido (upstream, 0.2.0-1)
+### aurora-fido (upstream, 0.2.0-2)
 
 - **Source.** fido/ at the aurora-fido pin, built with `LIBEXECDIR=/usr/lib/aurora-fido` as alarm builds it.
 - **Units.** Opt in: neither aurora-fido.service nor the aurora-passkeyd user unit is enabled or started.
