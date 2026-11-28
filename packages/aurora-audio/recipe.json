@@ -1,6 +1,6 @@
 {
   "source": "aurora-audio",
-  "version": "4.1.aurora2-2",
+  "version": "4.1.aurora2-3",
   "kind": "upstream",
   "upstream": {"pin": "aurora-audio"},
   "changes": "Aurora's Apple Silicon PipeWire and WirePlumber DSP profiles (its asahi-audio fork), including the MacBook Neo (J700), with the legacy speaker graphs restored for the protection that keeps the speakers until a switch to speakerguardd v2. MCA speaker PCMs and the J616's wake on period interrupts. Pulls the whole speaker protection stack, as alarm-aurora's aurora-audio does, and replaces Debian's asahi-audio.\nThe legacy speaker protection (speakersafetyd, speakerguardd 0.1) is deprecated and will be removed; speakerguardd v2 is opt in through aurora-speaker-upgrade, and the description says so.",

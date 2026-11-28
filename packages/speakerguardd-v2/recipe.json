@@ -1,6 +1,6 @@
 {
   "source": "speakerguardd-v2",
-  "version": "1.0.0~alpha.2-2",
+  "version": "1.0.0~alpha.2-3",
   "kind": "upstream",
   "upstream": {"pin": "speakerguardd-v2"},
   "network": true,
