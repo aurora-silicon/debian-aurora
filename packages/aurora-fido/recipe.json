@@ -1,9 +1,9 @@
 {
   "source": "aurora-fido",
-  "version": "0.2.0-1",
+  "version": "0.2.0-2",
   "kind": "upstream",
   "upstream": {"pin": "aurora-fido"},
-  "changes": "Touch ID as a FIDO2/U2F security key for WebAuthn, SSH and pam_u2f (aurora-sep-userspace fido/ at the aurora-fido pin). Opt in: installed off, 'sudo aurora-fido enable' turns it on.",
+  "changes": "Touch ID as a FIDO2/U2F security key for WebAuthn, SSH and pam_u2f (aurora-sep-userspace fido/ at the aurora-fido pin, including portal-only native passkey front-end and thread-safe D-Bus cancel test). Opt in: installed off, 'sudo aurora-fido enable' turns it on.",
   "alarm": ["aurora-fido"],
   "notes": "Installed as alarm-aurora installs it (Python package in /usr/lib/aurora-fido, helpers in /usr/lib/aurora-fido, the per-user aurora-passkeyd user unit). Neither unit is enabled or started; upstream's disable presets are kept."
 }
