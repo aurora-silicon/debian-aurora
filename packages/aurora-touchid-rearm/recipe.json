@@ -1,6 +1,6 @@
 {
   "source": "aurora-touchid-rearm",
-  "version": "1-1",
+  "version": "1-2",
   "kind": "upstream",
   "upstream": {"pin": "aurora-touchid-rearm"},
   "changes": "Re-arm Touch ID with the password after a lockout (aurora-sep-userspace touchid-rearm at the aurora-touchid-rearm pin): the pam_aurora_touchid module, the socket-activated aurora-touchid-rearm helper and aurora-touchid-boot.service (the password once after boot, /etc/aurora/touchid.conf).\nThe PAM module goes into common-auth's additional block through a pam-auth-update profile, so it runs only after an accepted login; aurora-touchid-rearm.socket and aurora-touchid-boot.service are enabled, as alarm-aurora's preset does.",

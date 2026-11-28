@@ -1,6 +1,6 @@
 {
   "source": "aurora-platform",
-  "version": "0.1.13-3",
+  "version": "0.1.13-4",
   "kind": "upstream",
   "upstream": {
     "pin": "aurora-firstboot"
