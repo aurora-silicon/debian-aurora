@@ -10,7 +10,7 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 include /usr/share/dpkg/buildflags.mk
 
 # Bump with every kernel pin; debian/control names the same release.
-ABINUM := 2
+ABINUM := 3
 RELEASE := $(DEB_VERSION_UPSTREAM)-$(ABINUM)-aurora
 IMAGE := debian/linux-image-$(RELEASE)
 HEADERS := debian/linux-headers-$(RELEASE)
